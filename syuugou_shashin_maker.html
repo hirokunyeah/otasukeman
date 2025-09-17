@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>集合写真メーカー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+        }
+        .canvas-container {
+            width: 100%;
+            max-width: 800px; /* 最大幅を設定 */
+            margin: 0 auto;
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        /* ローディングスピナー */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8">
+        <div class="text-center mb-6">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">集合写真メーカー</h1>
+            <p class="text-gray-500 mt-2">思い出の写真を、特別な一枚に。</p>
+        </div>
+
+        <!-- コントロールパネル -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 items-end">
+            <div>
+                <label for="imageLoader" class="block text-sm font-medium text-gray-700 mb-2">1. 写真を選択</label>
+                <input type="file" id="imageLoader" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors"/>
+            </div>
+            <div>
+                <label for="eventName" class="block text-sm font-medium text-gray-700 mb-2">2. イベント名を入力</label>
+                <input type="text" id="eventName" value="令和七年度 記念写真" placeholder="例：〇〇株式会社 創立記念" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow">
+            </div>
+        </div>
+
+        <!-- 詳細設定パネル -->
+        <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-6">
+            <h3 class="text-md font-bold text-gray-700 mb-4">3. 詳細設定</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
+                <!-- 枠の太さ -->
+                <div>
+                    <label for="frameSlider" class="block text-sm font-medium text-gray-700">枠の太さ: <span id="frameValue" class="font-bold text-blue-600">2.5</span>%</label>
+                    <input type="range" id="frameSlider" min="0" max="15" value="2.5" step="0.1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+                 <!-- 空のdivでレイアウト調整 -->
+                <div></div>
+                <!-- 写真の位置（左右） -->
+                <div class="flex flex-col">
+                     <label for="offsetXSlider" class="block text-sm font-medium text-gray-700">写真の位置 (左右): <span id="offsetXValue" class="font-bold text-blue-600">0</span>px</label>
+                     <div class="flex items-center gap-2">
+                        <input type="range" id="offsetXSlider" min="-200" max="200" value="0" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        <button id="resetXBtn" title="リセット" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 p-2 rounded-md transition-colors">リセット</button>
+                     </div>
+                </div>
+                <!-- 写真の位置（上下） -->
+                <div class="flex flex-col">
+                     <label for="offsetYSlider" class="block text-sm font-medium text-gray-700">写真の位置 (上下): <span id="offsetYValue" class="font-bold text-blue-600">0</span>px</label>
+                     <div class="flex items-center gap-2">
+                        <input type="range" id="offsetYSlider" min="-200" max="200" value="0" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        <button id="resetYBtn" title="リセット" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 p-2 rounded-md transition-colors">リセット</button>
+                     </div>
+                </div>
+                <!-- テキストエリアの高さ -->
+                <div class="flex flex-col">
+                     <label for="textAreaSlider" class="block text-sm font-medium text-gray-700">テキストエリアの高さ: <span id="textAreaValue" class="font-bold text-blue-600">10</span>%</label>
+                     <div class="flex items-center gap-2">
+                        <input type="range" id="textAreaSlider" min="5" max="30" value="10" step="0.5" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                     </div>
+                </div>
+                <!-- テキストのサイズ -->
+                <div class="flex flex-col">
+                     <label for="fontSizeSlider" class="block text-sm font-medium text-gray-700">テキストのサイズ: <span id="fontSizeValue" class="font-bold text-blue-600">40</span>%</label>
+                     <div class="flex items-center gap-2">
+                        <input type="range" id="fontSizeSlider" min="10" max="100" value="40" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                     </div>
+                </div>
+                <!-- テキストの位置（上下） -->
+                <div class="flex flex-col">
+                     <label for="textOffsetYSlider" class="block text-sm font-medium text-gray-700">テキストの位置 (上下): <span id="textOffsetYValue" class="font-bold text-blue-600">0</span>px</label>
+                     <div class="flex items-center gap-2">
+                        <input type="range" id="textOffsetYSlider" min="-100" max="100" value="0" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                        <button id="resetTextBtn" title="リセット" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 p-2 rounded-md transition-colors">リセット</button>
+                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- プレビューとダウンロードエリア -->
+        <div class="bg-gray-50 p-4 rounded-lg">
+             <div class="flex justify-between items-center mb-4">
+                 <h2 class="text-lg font-bold text-gray-700">プレビュー</h2>
+                 <button id="downloadBtn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-5 rounded-lg transition-transform transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:transform-none" disabled>
+                     ダウンロード
+                 </button>
+             </div>
+            
+            <div id="previewArea" class="canvas-container flex items-center justify-center bg-gray-200 rounded-lg min-h-[300px]">
+                <div id="placeholder" class="text-center text-gray-500">
+                    <p>ここに加工後の写真が表示されます。</p>
+                    <p class="text-sm">上のボタンから写真を選択してください。</p>
+                </div>
+                <div id="loader" class="loader hidden"></div>
+                <canvas id="canvas" class="hidden"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const imageLoader = document.getElementById('imageLoader');
+        const eventNameInput = document.getElementById('eventName');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const previewArea = document.getElementById('previewArea');
+        const placeholder = document.getElementById('placeholder');
+        const loader = document.getElementById('loader');
+
+        // --- 新しいUI要素 ---
+        const frameSlider = document.getElementById('frameSlider');
+        const frameValue = document.getElementById('frameValue');
+        const offsetXSlider = document.getElementById('offsetXSlider');
+        const offsetXValue = document.getElementById('offsetXValue');
+        const offsetYSlider = document.getElementById('offsetYSlider');
+        const offsetYValue = document.getElementById('offsetYValue');
+        const resetXBtn = document.getElementById('resetXBtn');
+        const resetYBtn = document.getElementById('resetYBtn');
+        // --- テキスト調整用のUI要素 ---
+        const textAreaSlider = document.getElementById('textAreaSlider');
+        const textAreaValue = document.getElementById('textAreaValue');
+        const fontSizeSlider = document.getElementById('fontSizeSlider');
+        const fontSizeValue = document.getElementById('fontSizeValue');
+        const textOffsetYSlider = document.getElementById('textOffsetYSlider');
+        const textOffsetYValue = document.getElementById('textOffsetYValue');
+        const resetTextBtn = document.getElementById('resetTextBtn');
+
+        let originalImage = null;
+
+        // ファイルが選択されたときの処理
+        imageLoader.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = e => {
+                originalImage = new Image();
+                originalImage.onload = () => {
+                    // 新しい画像が読み込まれたら、設定をリセット
+                    resetSettingsToDefault();
+
+                    // オフセットスライダーの可動域を画像サイズに基づいて動的に設定
+                    const maxOffsetX = Math.round(originalImage.width * 0.5);
+                    const maxOffsetY = Math.round(originalImage.height * 0.5);
+                    offsetXSlider.min = -maxOffsetX;
+                    offsetXSlider.max = maxOffsetX;
+                    offsetYSlider.min = -maxOffsetY;
+                    offsetYSlider.max = maxOffsetY;
+                    // テキストのオフセットYの可動域も設定
+                    updateTextOffsetYRange();
+
+
+                    showLoader();
+                    // 描画処理を少し遅らせてローダーを見せる
+                    setTimeout(() => {
+                        drawImageWithFrame();
+                        hideLoader();
+                    }, 500);
+                };
+                originalImage.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- イベントリスナー ---
+        function handleSettingsChange() {
+            if (originalImage) {
+                drawImageWithFrame();
+            }
+        }
+
+        eventNameInput.addEventListener('input', handleSettingsChange);
+        
+        frameSlider.addEventListener('input', () => {
+            frameValue.textContent = frameSlider.value;
+            handleSettingsChange();
+        });
+
+        offsetXSlider.addEventListener('input', () => {
+            offsetXValue.textContent = offsetXSlider.value;
+            handleSettingsChange();
+        });
+
+        offsetYSlider.addEventListener('input', () => {
+            offsetYValue.textContent = offsetYSlider.value;
+            handleSettingsChange();
+        });
+
+        textAreaSlider.addEventListener('input', () => {
+            textAreaValue.textContent = textAreaSlider.value;
+            updateTextOffsetYRange(); // テキストエリアの高さが変わったら、Yオフセットの可動域も更新
+            handleSettingsChange();
+        });
+
+        fontSizeSlider.addEventListener('input', () => {
+            fontSizeValue.textContent = fontSizeSlider.value;
+            handleSettingsChange();
+        });
+
+        textOffsetYSlider.addEventListener('input', () => {
+            textOffsetYValue.textContent = textOffsetYSlider.value;
+            handleSettingsChange();
+        });
+
+        resetXBtn.addEventListener('click', () => {
+            offsetXSlider.value = 0;
+            offsetXValue.textContent = 0;
+            handleSettingsChange();
+        });
+
+        resetYBtn.addEventListener('click', () => {
+            offsetYSlider.value = 0;
+            offsetYValue.textContent = 0;
+            handleSettingsChange();
+        });
+
+        resetTextBtn.addEventListener('click', () => {
+            textAreaSlider.value = 10;
+            textAreaValue.textContent = 10;
+            fontSizeSlider.value = 40;
+            fontSizeValue.textContent = 40;
+            textOffsetYSlider.value = 0;
+            textOffsetYValue.textContent = 0;
+            updateTextOffsetYRange();
+            handleSettingsChange();
+        });
+
+        // 設定をデフォルトに戻す関数
+        function resetSettingsToDefault() {
+            frameSlider.value = 2.5;
+            frameValue.textContent = '2.5';
+            offsetXSlider.value = 0;
+            offsetXValue.textContent = '0';
+            offsetYSlider.value = 0;
+            offsetYValue.textContent = '0';
+            // テキスト設定もリセット
+            textAreaSlider.value = 10;
+            textAreaValue.textContent = '10';
+            fontSizeSlider.value = 40;
+            fontSizeValue.textContent = '40';
+            textOffsetYSlider.value = 0;
+            textOffsetYValue.textContent = '0';
+        }
+
+
+        // ダウンロードボタンの処理
+        downloadBtn.addEventListener('click', () => {
+            if (!originalImage) return;
+            
+            const link = document.createElement('a');
+            // ファイル名をイベント名から生成（記号などを削除）
+            const fileName = (eventNameInput.value.replace(/[\\/:*?"<>|]/g, '') || '記念写真') + '.png';
+            link.download = fileName;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+
+        function showLoader() {
+            placeholder.classList.add('hidden');
+            canvas.classList.add('hidden');
+            loader.classList.remove('hidden');
+            downloadBtn.disabled = true;
+        }
+
+        function hideLoader() {
+            loader.classList.add('hidden');
+            canvas.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            downloadBtn.disabled = false;
+        }
+
+        // 枠とテキスト付きで画像を描画する関数
+        function drawImageWithFrame() {
+            if (!originalImage) return;
+
+            const img = originalImage;
+            const eventName = eventNameInput.value;
+
+            // --- スライダーから値を取得 ---
+            const framePaddingRatio = parseFloat(frameSlider.value) / 100; // 例: 2.5% -> 0.025
+            const offsetX = parseInt(offsetXSlider.value, 10);
+            const offsetY = parseInt(offsetYSlider.value, 10);
+            const textAreaRatio = parseFloat(textAreaSlider.value) / 100;
+            const fontSizeRatio = parseFloat(fontSizeSlider.value) / 100; // 例: 40% -> 0.4
+            const textOffsetY = parseInt(textOffsetYSlider.value, 10);
+
+
+            // --- 寸法計算 ---
+            // 枠の太さやテキストエリアの高さを画像の幅に対する割合で決める
+            // const textAreaRatio = 0.1; // 削除
+            
+            const framePadding = img.width * framePaddingRatio;
+            const textAreaHeight = img.width * textAreaRatio;
+
+            // Canvas全体のサイズ
+            const canvasWidth = img.width + framePadding * 2;
+            const canvasHeight = img.height + framePadding * 2 + textAreaHeight;
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+
+            // --- 描画処理 ---
+            // 1. 白い背景（枠）を描画
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // 2. 画像を描画 (オフセットを適用)
+            ctx.drawImage(img, framePadding + offsetX, framePadding + offsetY, img.width, img.height);
+            
+            // 3. テキストを描画
+            const textY = framePadding + img.height + (textAreaHeight / 2) + textOffsetY;
+            const fontSize = Math.max(20, textAreaHeight * fontSizeRatio); // フォントサイズの下限を少し下げる
+            
+            ctx.fillStyle = 'black';
+            ctx.font = `bold ${fontSize}px "Noto Sans JP", sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(eventName, canvasWidth / 2, textY);
+
+            downloadBtn.disabled = false;
+        }
+
+        // テキストのY軸オフセットスライダーの可動範囲を動的に更新する関数
+        function updateTextOffsetYRange() {
+            if (!originalImage) return;
+            const currentTextAreaHeight = originalImage.width * (parseFloat(textAreaSlider.value) / 100);
+            const maxTextOffsetY = Math.round(currentTextAreaHeight / 2);
+            textOffsetYSlider.min = -maxTextOffsetY;
+            textOffsetYSlider.max = maxTextOffsetY;
+
+            // 現在値が新しい範囲外になった場合は補正する
+            if (parseInt(textOffsetYSlider.value, 10) > maxTextOffsetY) {
+                textOffsetYSlider.value = maxTextOffsetY;
+                textOffsetYValue.textContent = maxTextOffsetY;
+            } else if (parseInt(textOffsetYSlider.value, 10) < -maxTextOffsetY) {
+                textOffsetYSlider.value = -maxTextOffsetY;
+                 textOffsetYValue.textContent = -maxTextOffsetY;
+            }
+        }
+
+        // ウィンドウリサイズ時に再描画（今回は不要ですが、参考までに）
+        // window.addEventListener('resize', () => {
+        //     if(originalImage) {
+        //         drawImageWithFrame();
+        //     }
+        // });
+    </script>
+
+</body>
+</html>
+
+
+
