@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPA過去問学習アプリ (インポート/エクスポート機能付き)</title>
+    <!-- pdf.jsライブラリをCDNから読み込みます -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background-color: #fff;
+            padding: 20px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #uploader {
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .file-upload-area, .api-key-area {
+            margin-bottom: 15px;
+        }
+        input[type="file"] { display: none; }
+        input[type="password"] {
+            width: 70%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        label.file-label {
+            background-color: #6c757d;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        label.file-label:hover { background-color: #5a6268; }
+        .api-key-area button, #start-button, .resume-button, .delete-button, .reset-button, .export-button {
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        .api-key-area button {
+            background-color: #ffc107;
+            color: #212529;
+            margin-left: 5px;
+        }
+        #start-button {
+            background-color: #1a73e8;
+            color: white;
+            width: 100%;
+            margin-top: 10px;
+            font-size: 16px;
+            padding: 12px 20px;
+        }
+        .resume-button { background-color: #28a745; color: white; }
+        .export-button { background-color: #17a2b8; color: white; }
+        .delete-button, .reset-button { background-color: #dc3545; color: white; }
+        #start-button:hover:not(:disabled), .resume-button:hover { background-color: #155ab6; }
+        #start-button:disabled { background-color: #6c757d; cursor: wait; }
+        
+        #session-manager { display: none; }
+        #session-list { list-style: none; padding: 0; }
+        .session-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .session-info { text-align: left; }
+        .session-info .name { font-weight: bold; }
+        .session-info .date { font-size: 0.9em; color: #666; }
+        .session-actions button { margin-left: 10px; }
+        #new-session-section { border: 2px dashed #ccc; padding: 20px; border-radius: 8px; margin-top:30px; }
+
+        #pdf-viewer { display: none; }
+        #pdf-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        #pdf-controls button {
+            background-color: #fff;
+            color: #1a73e8;
+            border: 1px solid #1a73e8;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        #pdf-controls button:hover:not(:disabled) { background-color: #1a73e8; color: #fff; }
+        #pdf-controls button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #page-info { margin: 0 15px; font-weight: bold; }
+        #pdf-canvas {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        #quiz-container { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+        .quiz-set {
+            background-color: #f9f9f9;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .quiz-set h3 { margin-top: 0; color: #333; }
+        .choices { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .choice-label { font-size: 18px; }
+        .answer-button {
+            width: 100%; padding: 10px; font-size: 16px; background-color: #28a745;
+            color: white; border: none; border-radius: 5px; cursor: pointer;
+        }
+        .answer-button:disabled { background-color: #6c757d; }
+        .result-area {
+            margin-top: 15px; padding: 12px; border-radius: 5px;
+            font-size: 16px; text-align: center; display: none;
+        }
+        .correct { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .incorrect { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .explanation-area {
+            margin-top: 15px; padding: 15px; border-radius: 5px;
+            font-size: 15px; line-height: 1.6; text-align: left;
+            background-color: #e9f5ff; border: 1px solid #b3d7f7; white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>IPA過去問学習アプリ</h1>
+        <div id="uploader">
+             <div id="session-manager">
+                <h3>学習セッションの選択</h3>
+                <ul id="session-list"></ul>
+                <div id="new-session-section">
+                    <h4>▼ 新しく学習を始める</h4>
+                     <div class="api-key-area">
+                        <p><strong>OpenAI APIキー</strong></p>
+                        <input type="password" id="apiKeyInput" placeholder="sk-...">
+                        <button id="saveApiKeyButton">保存</button>
+                    </div>
+                    <div class="file-upload-area">
+                        <p><strong>1. 問題ファイル(PDF)</strong></p>
+                        <label for="mondaiFile" class="file-label">問題を選択</label>
+                        <input type="file" id="mondaiFile" accept=".pdf">
+                        <span id="mondaiFileName"></span>
+                    </div>
+                    <div class="file-upload-area">
+                        <p><strong>2. 解答ファイル(PDF)</strong></p>
+                        <label for="kaitouFile" class="file-label">解答を選択</label>
+                        <input type="file" id="kaitouFile" accept=".pdf">
+                        <span id="kaitouFileName"></span>
+                    </div>
+                    <button id="start-button">学習を開始する</button>
+                    <div class="file-upload-area" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <p><strong>または、学習データをインポートする</strong></p>
+                        <label for="importFile" class="file-label" style="background-color: #007bff;">ファイルを選択してインポート</label>
+                        <input type="file" id="importFile" accept=".json">
+                        <span id="importFileName"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="pdf-viewer">
+            <div id="pdf-controls">
+                <button id="back-to-sessions">セッション選択に戻る</button>
+                <button id="prev-page">前のページ</button>
+                <span id="page-info">ページ: <span id="page-num"></span> / <span id="page-count"></span></span>
+                <button id="next-page">次のページ</button>
+            </div>
+            <canvas id="pdf-canvas"></canvas>
+            <div id="quiz-container"></div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+        const DB_NAME = 'ipaQuizAppDB';
+        const STORE_NAME = 'sessions';
+
+        const openDB = () => new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = e => { if (!e.target.result.objectStoreNames.contains(STORE_NAME)) e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id' }); };
+            request.onsuccess = e => resolve(e.target.result);
+            request.onerror = e => reject(e.target.error);
+        });
+        const saveData = async (data) => { const db = await openDB(); return db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).put(data).transaction.commit(); };
+        const loadData = async (id) => { const db = await openDB(); return new Promise((resolve, reject) => { const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).get(id); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); };
+        const loadAllData = async () => { const db = await openDB(); return new Promise((resolve, reject) => { const req = db.transaction(STORE_NAME, 'readonly').objectStore(STORE_NAME).getAll(); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); }); };
+        const deleteData = async (id) => { const db = await openDB(); return db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).delete(id).transaction.commit(); };
+
+        const mondaiFileInput = document.getElementById('mondaiFile');
+        const kaitouFileInput = document.getElementById('kaitouFile');
+        const importFileInput = document.getElementById('importFile');
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const saveApiKeyButton = document.getElementById('saveApiKeyButton');
+        const startButton = document.getElementById('start-button');
+        const pdfViewer = document.getElementById('pdf-viewer');
+        const canvas = document.getElementById('pdf-canvas');
+        const ctx = canvas.getContext('2d');
+        const prevPageBtn = document.getElementById('prev-page');
+        const nextPageBtn = document.getElementById('next-page');
+        const pageNumSpan = document.getElementById('page-num');
+        const pageCountSpan = document.getElementById('page-count');
+        const quizContainer = document.getElementById('quiz-container');
+        const sessionManager = document.getElementById('session-manager');
+        const sessionList = document.getElementById('session-list');
+        const backToSessionsBtn = document.getElementById('back-to-sessions');
+        
+        let mondaiPdfDoc = null;
+        let currentSessionId = null;
+        let currentPageNum = 1;
+        let isPageRendering = false;
+        let pageNumPending = null;
+        const scale = 1.5;
+        let answers = new Map();
+        let pageToQuestionsMap = new Map();
+        let userProgress = new Map();
+        let openAIApiKey = '';
+
+        const arrayBufferToBase64 = (buffer) => {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        };
+
+        const base64ToArrayBuffer = (base64) => {
+            const binary_string = window.atob(base64);
+            const len = binary_string.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
+        };
+
+        const renderSessionList = async () => {
+            const sessions = await loadAllData();
+            sessionList.innerHTML = '';
+            if (sessions.length > 0) {
+                sessions.sort((a, b) => b.id - a.id).forEach(session => {
+                    const li = document.createElement('li');
+                    li.className = 'session-item';
+                    li.innerHTML = `
+                        <div class="session-info">
+                            <div class="name">${session.name}</div>
+                            <div class="date">作成日: ${session.createdAt}</div>
+                        </div>
+                        <div class="session-actions">
+                            <button class="resume-button" data-session-id="${session.id}">再開</button>
+                            <button class="export-button" data-session-id="${session.id}">エクスポート</button>
+                            <button class="delete-button" data-session-id="${session.id}">削除</button>
+                        </div>
+                    `;
+                    sessionList.appendChild(li);
+                });
+            } else {
+                sessionList.innerHTML = '<p>保存されている学習セッションはありません。</p>';
+            }
+            sessionManager.style.display = 'block';
+        };
+
+        const initialize = async () => {
+            loadApiKey();
+            await renderSessionList();
+        };
+
+        const resumeSession = async (sessionId) => {
+            const session = await loadData(sessionId);
+            if (!session) { alert('セッションの読み込みに失敗しました。'); return; }
+            
+            currentSessionId = session.id;
+            answers = new Map(session.answers);
+            pageToQuestionsMap = new Map(session.pageToQuestionsMap);
+            userProgress = new Map(session.userProgress);
+            currentPageNum = session.currentPageNum || 1;
+            
+            mondaiPdfDoc = await pdfjsLib.getDocument({ data: session.mondaiFile }).promise;
+            
+            pageCountSpan.textContent = mondaiPdfDoc.numPages;
+            renderPage(currentPageNum);
+            
+            document.getElementById('uploader').style.display = 'none';
+            pdfViewer.style.display = 'block';
+        };
+
+        const deleteSession = async (sessionId) => {
+            if (confirm('この学習セッションを削除しますか？')) {
+                await deleteData(sessionId);
+                await renderSessionList();
+            }
+        };
+
+        const exportSession = async (sessionId) => {
+            const session = await loadData(sessionId);
+            if (!session) { alert('エクスポートするセッションが見つかりません。'); return; }
+
+            const exportData = {
+                ...session,
+                mondaiFile: arrayBufferToBase64(session.mondaiFile),
+            };
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ipa-quiz-session-${session.name.replace(/\.pdf$/i, '')}-${session.id}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        const importSession = async (file) => {
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    const newSession = {
+                        ...importedData,
+                        id: Date.now(),
+                        name: `(インポート) ${importedData.name}`,
+                        mondaiFile: base64ToArrayBuffer(importedData.mondaiFile),
+                    };
+                    await saveData(newSession);
+                    alert(`セッション「${newSession.name}」をインポートしました。`);
+                    await renderSessionList();
+                    importFileInput.value = ''; // Clear the input
+                } catch (err) {
+                    console.error("インポートエラー:", err);
+                    alert("ファイルのインポートに失敗しました。ファイルが破損しているか、形式が正しくありません。");
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        window.addEventListener('load', initialize);
+        
+        sessionList.addEventListener('click', (e) => {
+            const sessionId = e.target.dataset.sessionId;
+            if (!sessionId) return;
+            if (e.target.matches('.resume-button')) {
+                resumeSession(Number(sessionId));
+            } else if (e.target.matches('.delete-button')) {
+                deleteSession(Number(sessionId));
+            } else if (e.target.matches('.export-button')) {
+                exportSession(Number(sessionId));
+            }
+        });
+        
+        backToSessionsBtn.addEventListener('click', () => {
+             pdfViewer.style.display = 'none';
+             document.getElementById('uploader').style.display = 'block';
+             currentSessionId = null;
+             renderSessionList();
+        });
+
+        importFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                 document.getElementById('importFileName').textContent = file.name;
+                 importSession(file);
+            }
+        });
+        
+        const saveApiKey = () => {
+            const key = apiKeyInput.value;
+            if (key && key.startsWith('sk-')) {
+                localStorage.setItem('openai_api_key', key);
+                openAIApiKey = key;
+                alert('OpenAI APIキーを保存しました。');
+            } else { alert('有効なAPIキーを入力してください。'); }
+        };
+        const loadApiKey = () => {
+            openAIApiKey = localStorage.getItem('openai_api_key') || '';
+            apiKeyInput.value = openAIApiKey;
+        };
+        saveApiKeyButton.addEventListener('click', saveApiKey);
+
+        mondaiFileInput.addEventListener('change', e => document.getElementById('mondaiFileName').textContent = e.target.files[0] ? e.target.files[0].name : '');
+        kaitouFileInput.addEventListener('change', e => document.getElementById('kaitouFileName').textContent = e.target.files[0] ? e.target.files[0].name : '');
+
+        const extractTextFromPdf = async (file) => {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let allText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent({ normalizeWhitespace: true });
+                allText += textContent.items.map(item => item.str).join(' ');
+            }
+            return allText;
+        };
+
+        const parseAnswers = (text) => {
+            const parsedAnswers = new Map();
+            const regex = /問\s*(\d+)\s*([アイウエオ])/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) parsedAnswers.set(parseInt(match[1], 10), match[2]);
+            return parsedAnswers;
+        };
+
+        const analyzeQuestionPagesWithVision = async (pdfDoc) => {
+            startButton.disabled = true;
+            startButton.textContent = '問題構成をAIで解析中... (時間がかかります)';
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                const page = await pdfDoc.getPage(i);
+                const viewport = page.getViewport({ scale: 1.5 });
+                tempCanvas.width = viewport.width; tempCanvas.height = viewport.height;
+                await page.render({ canvasContext: tempCtx, viewport }).promise;
+                const base64Image = tempCanvas.toDataURL('image/jpeg');
+                const prompt = "この画像に含まれる「問」から始まる問題番号を全て抽出し、JSON形式の数字の配列で返してください。例: [1, 2, 5]。問題が見つからない場合は空の配列 [] を返してください。";
+                try {
+                    const content = await callVisionAPI(prompt, base64Image);
+                    const jsonMatch = content.match(/\[\s*\d+(?:\s*,\s*\d+)*\s*\]/);
+                    if (jsonMatch) {
+                        const questionsInPage = JSON.parse(jsonMatch[0]);
+                        if (questionsInPage.length > 0) pageToQuestionsMap.set(i, questionsInPage.sort((a, b) => a - b));
+                    }
+                } catch (error) { console.error(`ページ ${i} の解析中にエラー:`, error); }
+            }
+            startButton.disabled = false; startButton.textContent = '学習を開始する';
+        };
+        
+        const callVisionAPI = async (prompt, base64Image) => {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openAIApiKey}` },
+                body: JSON.stringify({
+                    model: "gpt-4o",
+                    messages: [{ role: "user", content: [{ type: "text", text: prompt }, { type: "image_url", image_url: { "url": base64Image } }] }],
+                    max_tokens: 1000
+                })
+            });
+            if (!response.ok) throw new Error(`OpenAI API Error: ${response.status} ${response.statusText}`);
+            const data = await response.json();
+            return data.choices[0].message.content;
+        };
+
+        const renderPage = async (num) => {
+            isPageRendering = true;
+            try {
+                const page = await mondaiPdfDoc.getPage(num);
+                const viewport = page.getViewport({ scale });
+                canvas.height = viewport.height; canvas.width = viewport.width;
+                await page.render({ canvasContext: ctx, viewport }).promise;
+            } finally {
+                isPageRendering = false;
+                if (pageNumPending !== null) { renderPage(pageNumPending); pageNumPending = null; }
+            }
+            pageNumSpan.textContent = num;
+            updateButtons();
+            renderQuizControls(num);
+        };
+
+        const renderQuizControls = (pageNum) => {
+            quizContainer.innerHTML = '';
+            const questions = pageToQuestionsMap.get(pageNum);
+            if (questions && questions.length > 0) {
+                questions.forEach(qNum => {
+                    const progress = userProgress.get(qNum);
+                    const quizSet = document.createElement('div');
+                    quizSet.className = 'quiz-set';
+                    quizSet.innerHTML = `
+                        <h3>問 ${qNum}</h3>
+                        <div class="choices">
+                            ${['ア', 'イ', 'ウ', 'エ'].map(c => `<label class="choice-label"><input type="radio" name="choice-${qNum}" value="${c}"> ${c}</label>`).join('')}
+                        </div>
+                        <button class="answer-button" data-question-number="${qNum}">問 ${qNum} を回答する</button>
+                        <div id="result-area-${qNum}" class="result-area"></div>
+                        <div id="explanation-area-${qNum}" class="explanation-area" style="display:none;"></div>`;
+                    quizContainer.appendChild(quizSet);
+
+                    if (progress) {
+                        const radio = quizSet.querySelector(`input[value="${progress.userAnswer}"]`);
+                        if (radio) radio.checked = true;
+                        const resultArea = quizSet.querySelector(`#result-area-${qNum}`);
+                        resultArea.style.display = 'block';
+                        resultArea.textContent = progress.resultText;
+                        resultArea.className = progress.resultClass;
+                        if (progress.explanation) {
+                            const explanationArea = quizSet.querySelector(`#explanation-area-${qNum}`);
+                            explanationArea.style.display = 'block';
+                            explanationArea.innerHTML = progress.explanation;
+                        }
+                        quizSet.querySelector('.answer-button').disabled = true;
+                    }
+                });
+            } else { quizContainer.innerHTML = '<p style="text-align:center;">このページでは解答する問題が検出されませんでした。</p>'; }
+        };
+
+        const getExplanationFromAI = async (qNum, correctAnswer) => {
+            const explanationArea = document.getElementById(`explanation-area-${qNum}`);
+            explanationArea.style.display = 'block';
+            explanationArea.innerHTML = '🤖 AIが解説を生成しています...';
+            const page = await mondaiPdfDoc.getPage(currentPageNum);
+            const viewport = page.getViewport({ scale: 1.5 });
+            const tempCanvas = document.createElement('canvas'); tempCanvas.width = viewport.width; tempCanvas.height = viewport.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            await page.render({ canvasContext: tempCtx, viewport }).promise;
+            const base64Image = tempCanvas.toDataURL('image/jpeg');
+            const prompt = `あなたは優秀なIT講師です。提供された試験問題の画像を見てください。画像の中の「問${qNum}」について、なぜ正解が「${correctAnswer}」になるのかを、初心者にも理解できるように詳しく解説してください。特に関連する専門用語や技術的な背景を丁寧に説明し、他の選択肢がなぜ間違いなのかについても簡潔に触れてください。`;
+            try {
+                const explanation = await callVisionAPI(prompt, base64Image);
+                explanationArea.innerHTML = explanation;
+                return explanation;
+            } catch (error) {
+                console.error(`問 ${qNum} の解説生成中にエラー:`, error);
+                const errorMsg = '解説の生成に失敗しました。';
+                explanationArea.innerHTML = errorMsg;
+                return errorMsg;
+            }
+        };
+
+        const updateSessionData = async (updatedFields) => {
+            const session = await loadData(currentSessionId);
+            if (session) {
+                const newSession = { ...session, ...updatedFields };
+                await saveData(newSession);
+            }
+        };
+
+        const queueRenderPage = (num) => { if (isPageRendering) pageNumPending = num; else renderPage(num); };
+        const updateButtons = () => {
+            prevPageBtn.disabled = (currentPageNum <= 1);
+            nextPageBtn.disabled = (currentPageNum >= mondaiPdfDoc.numPages);
+        };
+
+        const onPrevPage = async () => { if (currentPageNum > 1) { currentPageNum--; queueRenderPage(currentPageNum); await updateSessionData({ currentPageNum }); }};
+        const onNextPage = async () => { if (currentPageNum < mondaiPdfDoc.numPages) { currentPageNum++; queueRenderPage(currentPageNum); await updateSessionData({ currentPageNum }); }};
+        prevPageBtn.addEventListener('click', onPrevPage);
+        nextPageBtn.addEventListener('click', onNextPage);
+
+        quizContainer.addEventListener('click', async (event) => {
+            if (event.target.matches('.answer-button:not(:disabled)')) {
+                const button = event.target;
+                const qNum = parseInt(button.dataset.questionNumber, 10);
+                const selectedChoice = document.querySelector(`input[name="choice-${qNum}"]:checked`);
+                if (!selectedChoice) { alert(`問 ${qNum} の選択肢を選んでください。`); return; }
+                button.disabled = true;
+                const correctAnswer = answers.get(qNum);
+                const userAnswer = selectedChoice.value;
+                const resultArea = document.getElementById(`result-area-${qNum}`);
+                resultArea.style.display = 'block';
+
+                const progress = { userAnswer };
+                if (userAnswer === correctAnswer) {
+                    progress.resultText = `正解！`;
+                    progress.resultClass = 'result-area correct';
+                } else {
+                    progress.resultText = `不正解。正解は「${correctAnswer || '不明'}」です。`;
+                    progress.resultClass = 'result-area incorrect';
+                }
+                resultArea.textContent = progress.resultText;
+                resultArea.className = progress.resultClass;
+                progress.explanation = await getExplanationFromAI(qNum, correctAnswer);
+                userProgress.set(qNum, progress);
+                await updateSessionData({ userProgress: Array.from(userProgress.entries()) });
+            }
+        });
+
+        startButton.addEventListener('click', async () => {
+            const mondaiFile = mondaiFileInput.files[0];
+            const kaitouFile = kaitouFileInput.files[0];
+            if (!mondaiFile || !kaitouFile) { alert('問題ファイルと解答ファイルの両方を選択してください。'); return; }
+            if (!openAIApiKey) { alert(`OpenAI APIキーを設定・保存してください。`); return; }
+            
+            try {
+                const [kaitouText, mondaiFileBuffer] = await Promise.all([extractTextFromPdf(kaitouFile), mondaiFile.arrayBuffer()]);
+                answers = parseAnswers(kaitouText);
+                if (answers.size === 0) { alert('解答PDFから解答を読み取れませんでした。'); return; }
+                mondaiPdfDoc = await pdfjsLib.getDocument({ data: mondaiFileBuffer }).promise;
+                
+                userProgress = new Map();
+                pageToQuestionsMap = new Map();
+                await analyzeQuestionPagesWithVision(mondaiPdfDoc);
+                
+                const newSession = {
+                    id: Date.now(),
+                    name: mondaiFile.name,
+                    createdAt: new Date().toLocaleString(),
+                    mondaiFile: mondaiFileBuffer,
+                    answers: Array.from(answers.entries()),
+                    pageToQuestionsMap: Array.from(pageToQuestionsMap.entries()),
+                    userProgress: Array.from(userProgress.entries()),
+                    currentPageNum: 1
+                };
+                await saveData(newSession);
+                await resumeSession(newSession.id);
+            } catch (error) {
+                console.error('処理中にエラーが発生しました:', error);
+                alert(`ファイルの処理中にエラーが発生しました: ${error.message}`);
+                startButton.disabled = false;
+                startButton.textContent = '学習を開始する';
+            }
+        });
+    </script>
+</body>
+</html>
+
