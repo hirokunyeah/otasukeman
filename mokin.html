@@ -6,12 +6,13 @@
     <title>木琴アプリ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 全体の背景（床など） */
+        /* 全体の背景 */
         body {
             background-color: #e5e5e5;
+            touch-action: none; /* iOSでのスクロール防止 */
         }
 
-        /* 木琴の黒いフレーム（台座） */
+        /* 木琴の黒いフレーム */
         .xylophone-frame {
             background-color: #1a1a1a;
             border-radius: 16px;
@@ -19,14 +20,13 @@
                 0 20px 50px rgba(0,0,0,0.5),
                 inset 0 0 0 2px #333;
             position: relative;
-            /* タッチ操作の最適化 */
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
             overflow: hidden;
         }
 
-        /* 緑色のフェルト（緩衝材）のライン */
+        /* 緑色のフェルトライン */
         .felt-line {
             position: absolute;
             height: 12px;
@@ -39,7 +39,7 @@
             pointer-events: none;
         }
 
-        /* 鍵盤共通スタイル（ローズウッド調） */
+        /* 鍵盤共通スタイル */
         .key {
             cursor: pointer;
             transition: transform 0.05s, filter 0.05s;
@@ -53,19 +53,16 @@
             pointer-events: auto;
             z-index: 10;
             
-            /* リアルな木目（赤茶色） */
+            /* ローズウッド調の木目 */
             background-color: #8D4E36;
             background-image: 
-                /* 木目スジ */
                 repeating-linear-gradient(90deg, transparent 0, transparent 2px, rgba(0,0,0,0.1) 3px, transparent 4px),
-                /* 立体感のハイライトとシャドウ */
                 linear-gradient(to right, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 10%, rgba(0,0,0,0.1) 90%, rgba(0,0,0,0.3) 100%),
-                /* 丸みの表現（上下） */
                 linear-gradient(to bottom, rgba(255,255,255,0.1) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.2) 100%);
             
             box-shadow: 
-                2px 4px 8px rgba(0,0,0,0.4), /* 落ち影 */
-                inset 1px 1px 1px rgba(255,255,255,0.3); /* エッジの光 */
+                2px 4px 8px rgba(0,0,0,0.4),
+                inset 1px 1px 1px rgba(255,255,255,0.3);
         }
 
         /* 白鍵 */
@@ -78,22 +75,19 @@
         .key-accidental {
             position: absolute;
             top: -45%;
-            right: -25%; /* 白鍵の間に配置 */
+            right: -25%;
             width: 50%;
             height: 60%;
             z-index: 20;
-            
-            /* 黒鍵も同じ木材だが、少しだけ区別をつけるために暗くする */
             filter: brightness(0.95); 
             box-shadow: 
                 3px 6px 10px rgba(0,0,0,0.5),
                 inset 1px 1px 1px rgba(255,255,255,0.2);
         }
 
-        /* アクティブ時のアニメーション */
         .key:active, .key.active {
             transform: scale(0.97) translateY(2px);
-            filter: brightness(1.1); /* 押したときに少し明るく */
+            filter: brightness(1.1);
         }
         
         .key-accidental:active, .key-accidental.active {
@@ -101,7 +95,7 @@
             filter: brightness(1.05);
         }
 
-        /* 白い留め具（ピン） */
+        /* ピン */
         .pin {
             width: 10px;
             height: 10px;
@@ -113,13 +107,13 @@
             z-index: 15;
         }
 
-        /* 焼印風の文字 */
+        /* 文字 */
         .key-label {
-            color: #3e2723; /* 濃い焦げ茶 */
-            text-shadow: 0 1px 0 rgba(255,255,255,0.2), 0 -1px 0 rgba(0,0,0,0.3); /* 彫り込み効果 */
+            color: #3e2723;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.2), 0 -1px 0 rgba(0,0,0,0.3);
             opacity: 0.8;
             pointer-events: none;
-            font-family: "Hiragino Mincho ProN", "Yu Mincho", serif; /* 明朝体で和風に */
+            font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
         }
 
         .key-sub {
@@ -128,7 +122,6 @@
             opacity: 0.5;
         }
 
-        /* 横画面時の調整 */
         @media (orientation: landscape) and (max-height: 500px) {
             .xylophone-frame {
                 height: 85vh;
@@ -139,39 +132,39 @@
 <body class="h-screen w-screen overflow-hidden flex flex-col items-center justify-center font-sans bg-stone-200">
 
     <!-- コントロールパネル -->
-    <div class="absolute top-4 left-0 w-full flex justify-center z-50 pointer-events-none">
+    <div class="absolute top-4 left-0 w-full flex justify-center z-40 pointer-events-none">
         <div class="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg flex items-center gap-4 pointer-events-auto border border-stone-200">
             <h1 class="text-stone-700 font-bold tracking-wider text-sm sm:text-base">🎶 木琴</h1>
             <div class="h-4 w-px bg-stone-300"></div>
             <select id="instrument-select" class="bg-transparent border-none outline-none text-stone-700 font-bold cursor-pointer text-sm">
-                <option value="sine">木琴 (Standard)</option>
-                <option value="triangle">鉄琴 (Soft)</option>
-                <option value="square">8bit (Retro)</option>
-                <option value="sawtooth">シンセ (Sharp)</option>
+                <option value="sine">木琴</option>
+                <option value="triangle">鉄琴</option>
+                <option value="square">8bit</option>
+                <option value="sawtooth">シンセ</option>
             </select>
         </div>
     </div>
 
-    <!-- 案内メッセージ（iOSなどで音が出ない場合用） -->
-    <div id="start-overlay" class="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 transition-opacity duration-300 pointer-events-none opacity-0">
-        <div class="bg-white px-6 py-4 rounded-xl shadow-2xl text-center">
-            <p class="font-bold text-stone-700">画面をタップして開始</p>
-            <p class="text-xs text-stone-500 mt-1">※マナーモードを解除してください</p>
+    <!-- スタートボタンオーバーレイ（重要：iOS対策） -->
+    <div id="start-overlay" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-stone-900/80 backdrop-blur-sm transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-sm mx-4 transform transition-transform duration-200 scale-100">
+            <h2 class="text-2xl font-bold text-stone-800 mb-2">木琴を演奏する</h2>
+            <p class="text-stone-600 mb-6 text-sm">下のボタンを押して音を有効にしてください。<br>※マナーモードは解除してください</p>
+            
+            <button id="start-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-4 px-8 rounded-xl shadow-lg transform active:scale-95 transition-all text-lg flex items-center justify-center gap-2">
+                <span>▶ スタート</span>
+            </button>
+            <p class="text-xs text-stone-400 mt-4">iOS/iPadOSの場合は音が鳴るまで<br>ボタンを強くタップしてください</p>
         </div>
     </div>
 
-    <!-- 木琴本体エリア -->
+    <!-- 木琴本体 -->
     <div class="xylophone-frame w-[95%] max-w-5xl h-[60vh] sm:h-[60vh] max-h-[600px] flex flex-col justify-center items-center p-4 sm:p-8 relative">
-        
-        <!-- 背景のフェルトライン（上段・黒鍵用） -->
         <div class="felt-line" style="top: 20%;"></div>
         <div class="felt-line" style="top: 45%;"></div>
-
-        <!-- 背景のフェルトライン（下段・白鍵用） -->
         <div class="felt-line" style="bottom: 15%;"></div>
         <div class="felt-line" style="bottom: 45%;"></div>
 
-        <!-- 鍵盤エリア -->
         <div id="xylophone-board" class="flex justify-center items-end w-full h-full gap-1 sm:gap-2 relative z-10 pt-[15%]">
             <!-- JSで生成 -->
         </div>
@@ -180,7 +173,6 @@
     </div>
 
     <script>
-        // 音階データ定義（ひらがな表記に変更）
         const keysData = [
             { note: 'C4', freq: 261.63, label: 'ど', height: 100, sharp: { note: 'C#4', freq: 277.18 } },
             { note: 'D4', freq: 293.66, label: 'れ', height: 96, sharp: { note: 'D#4', freq: 311.13 } },
@@ -192,29 +184,68 @@
             { note: 'C5', freq: 523.25, label: 'ど', height: 72, sharp: null }
         ];
 
-        let audioCtx;
+        let audioCtx = null;
+        let isAudioInitialized = false;
+        
         const instrumentSelect = document.getElementById('instrument-select');
         const board = document.getElementById('xylophone-board');
         const startOverlay = document.getElementById('start-overlay');
+        const startBtn = document.getElementById('start-btn');
 
-        // AudioContext初期化（インスタンス作成のみ）
-        function createAudioContext() {
-            if (!audioCtx) {
-                // webkitAudioContextはiOS/Safari用
+        // iOS対応：オーディオ初期化とアンロック
+        // ユーザーがボタンをクリックした「直後」に同期的に実行する必要がある
+        async function initAudioContext() {
+            if (isAudioInitialized && audioCtx) {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                return;
+            }
+
+            try {
+                // 1. AudioContext作成
                 const AudioContextClass = window.AudioContext || window.webkitAudioContext;
                 audioCtx = new AudioContextClass();
+
+                // 2. iOS対策：無音バッファ再生
+                const buffer = audioCtx.createBuffer(1, 1, 22050);
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioCtx.destination);
+                source.start(0);
+
+                // 3. Resume実行
+                if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                // 4. 起動確認音（ごく短く、小さく鳴らす）
+                // これが聞こえれば成功
+                playTone(880, 'sine', 0.1, 0.1); 
+
+                isAudioInitialized = true;
+                
+                // オーバーレイを消す
+                startOverlay.style.opacity = '0';
+                setTimeout(() => {
+                    startOverlay.style.display = 'none';
+                }, 300);
+
+            } catch (e) {
+                console.error("Audio init failed:", e);
+                alert("オーディオの初期化に失敗しました。再読み込みしてください。");
             }
         }
 
-        // 音を鳴らすメイン関数
-        function playTone(freq, typeOverride) {
-            // まだ作成されてなければ作成
-            createAudioContext();
-            
-            // 重要：サスペンド状態なら再開を試みる
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+        // スタートボタンにイベントリスナーを設定
+        startBtn.addEventListener('click', initAudioContext);
+        startBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // クリック遅延対策
+            initAudioContext();
+        }, { passive: false });
+
+
+        // 音を鳴らす関数
+        function playTone(freq, typeOverride = null, duration = 2.0, volume = 1.0) {
+            if (!audioCtx) return;
 
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -225,33 +256,33 @@
 
             const now = audioCtx.currentTime;
             
-            // エンベロープ（音の減衰設定）
+            // 音色設定
             if (type === 'sine') {
                 gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(1, now + 0.005);
+                gainNode.gain.linearRampToValueAtTime(1.0 * volume, now + 0.005);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
             } else if (type === 'triangle') {
                 gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(0.6, now + 0.005);
+                gainNode.gain.linearRampToValueAtTime(0.6 * volume, now + 0.005);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
             } else {
                 gainNode.gain.setValueAtTime(0, now);
-                gainNode.gain.linearRampToValueAtTime(0.4, now + 0.01);
+                gainNode.gain.linearRampToValueAtTime(0.4 * volume, now + 0.01);
                 gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
             }
 
             osc.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             osc.start();
-            osc.stop(now + 2);
+            osc.stop(now + duration);
             
             setTimeout(() => {
                 osc.disconnect();
                 gainNode.disconnect();
-            }, 2000);
+            }, duration * 1000);
         }
 
-        // 鍵盤生成ロジック
+        // 鍵盤生成
         keysData.forEach((data) => {
             const wrapper = document.createElement('div');
             wrapper.className = 'relative flex-1 flex justify-center items-end h-full'; 
@@ -284,71 +315,16 @@
             board.appendChild(wrapper);
         });
 
-        // ---------------------------------------------------------
-        // iOS/iPadOS向けの強力なオーディオアンロック処理
-        // ---------------------------------------------------------
-        let isAudioUnlocked = false;
-
-        function unlockAudio(e) {
-            if (isAudioUnlocked) return;
-
-            createAudioContext();
-
-            // 1. Contextを再開
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume().then(() => {
-                    console.log('AudioContext resumed successfully');
-                }).catch(err => {
-                    console.error('Failed to resume AudioContext:', err);
-                });
-            }
-
-            // 2. iOS対策：無音のバッファを一瞬再生してエンジンを強制的に起こす
-            // これを行わないと、resume()だけでは音が鳴らない場合がある
-            const buffer = audioCtx.createBuffer(1, 1, 22050);
-            const source = audioCtx.createBufferSource();
-            source.buffer = buffer;
-            source.connect(audioCtx.destination);
-            source.start(0);
-
-            isAudioUnlocked = true;
-            
-            // オーバーレイを非表示に
-            if (startOverlay) {
-                startOverlay.style.opacity = '0';
-                setTimeout(() => startOverlay.style.display = 'none', 300);
-            }
-
-            // イベントリスナー削除
-            ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => 
-                document.body.removeEventListener(evt, unlockAudio)
-            );
-        }
-
-        // ユーザーが最初に何かしら操作したタイミングでアンロックを実行
-        ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => 
-            document.body.addEventListener(evt, unlockAudio, { once: true, capture: true })
-        );
-        
-        // 初回ロード時にユーザーに操作を促す表示（一瞬だけ出して、自然に消す）
-        if(audioCtx && audioCtx.state === 'suspended') {
-             startOverlay.style.opacity = '1';
-             startOverlay.style.pointerEvents = 'auto';
-        }
-
-
-        // ---------------------------------------------------------
-        // タッチ & グリッサンド処理
-        // ---------------------------------------------------------
-
+        // タッチ＆マウス制御
         function triggerKey(keyElement) {
             if (!keyElement) return;
-            
-            // まだロック解除されてない場合に備えてここでも呼ぶ
-            if (!isAudioUnlocked) unlockAudio();
-
             const freq = parseFloat(keyElement.dataset.freq);
             if (!freq) return;
+
+            // AudioContextが何らかの理由で落ちていたら再開
+            if (audioCtx && audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
 
             playTone(freq);
 
@@ -363,6 +339,9 @@
 
         const handleTouch = (e) => {
             if (e.cancelable && e.type !== 'touchend') e.preventDefault();
+            
+            // まだ初期化されていなければ何もしない（誤動作防止）
+            if (!isAudioInitialized) return;
 
             const touches = e.touches;
             const currentTouchIds = new Set();
@@ -373,7 +352,6 @@
 
                 const element = document.elementFromPoint(touch.clientX, touch.clientY);
                 const key = element ? element.closest('.key') : null;
-
                 const previousKey = activeTouches.get(touch.identifier);
 
                 if (key && key !== previousKey) {
@@ -385,9 +363,7 @@
             }
 
             for (const [id] of activeTouches) {
-                if (!currentTouchIds.has(id)) {
-                    activeTouches.delete(id);
-                }
+                if (!currentTouchIds.has(id)) activeTouches.delete(id);
             }
         };
 
@@ -395,6 +371,8 @@
         let lastHoveredKey = null;
 
         const handleMouse = (e) => {
+            if (!isAudioInitialized) return;
+
             if (e.type === 'mousedown') {
                 isMouseDown = true;
                 const key = e.target.closest('.key');
