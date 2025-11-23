@@ -152,6 +152,14 @@
         </div>
     </div>
 
+    <!-- 案内メッセージ（iOSなどで音が出ない場合用） -->
+    <div id="start-overlay" class="absolute inset-0 z-[60] flex items-center justify-center bg-black/50 transition-opacity duration-300 pointer-events-none opacity-0">
+        <div class="bg-white px-6 py-4 rounded-xl shadow-2xl text-center">
+            <p class="font-bold text-stone-700">画面をタップして開始</p>
+            <p class="text-xs text-stone-500 mt-1">※マナーモードを解除してください</p>
+        </div>
+    </div>
+
     <!-- 木琴本体エリア -->
     <div class="xylophone-frame w-[95%] max-w-5xl h-[60vh] sm:h-[60vh] max-h-[600px] flex flex-col justify-center items-center p-4 sm:p-8 relative">
         
@@ -187,20 +195,27 @@
         let audioCtx;
         const instrumentSelect = document.getElementById('instrument-select');
         const board = document.getElementById('xylophone-board');
+        const startOverlay = document.getElementById('start-overlay');
 
-        // AudioContext初期化
-        function initAudio() {
+        // AudioContext初期化（インスタンス作成のみ）
+        function createAudioContext() {
             if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
+                // webkitAudioContextはiOS/Safari用
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContextClass();
             }
         }
 
-        // 音を鳴らす
+        // 音を鳴らすメイン関数
         function playTone(freq, typeOverride) {
-            initAudio();
+            // まだ作成されてなければ作成
+            createAudioContext();
+            
+            // 重要：サスペンド状態なら再開を試みる
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             const type = typeOverride || instrumentSelect.value;
@@ -238,11 +253,9 @@
 
         // 鍵盤生成ロジック
         keysData.forEach((data) => {
-            // 1. ラッパー作成
             const wrapper = document.createElement('div');
             wrapper.className = 'relative flex-1 flex justify-center items-end h-full'; 
 
-            // 2. 白鍵作成（色はCSSで統一木目）
             const naturalKey = document.createElement('div');
             naturalKey.className = 'key key-natural';
             naturalKey.style.height = `${data.height}%`;
@@ -256,25 +269,73 @@
                 </div>
                 <div class="pin"></div>
             `;
-            
             wrapper.appendChild(naturalKey);
 
-            // 3. 黒鍵作成
             if (data.sharp) {
                 const sharpKey = document.createElement('div');
                 sharpKey.className = 'key key-accidental';
                 sharpKey.dataset.freq = data.sharp.freq;
-                
                 sharpKey.innerHTML = `
                     <div class="pin scale-75 mt-2"></div>
                     <div class="pin scale-75 mt-auto mb-2"></div>
                 `;
-                
                 wrapper.appendChild(sharpKey);
             }
-
             board.appendChild(wrapper);
         });
+
+        // ---------------------------------------------------------
+        // iOS/iPadOS向けの強力なオーディオアンロック処理
+        // ---------------------------------------------------------
+        let isAudioUnlocked = false;
+
+        function unlockAudio(e) {
+            if (isAudioUnlocked) return;
+
+            createAudioContext();
+
+            // 1. Contextを再開
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume().then(() => {
+                    console.log('AudioContext resumed successfully');
+                }).catch(err => {
+                    console.error('Failed to resume AudioContext:', err);
+                });
+            }
+
+            // 2. iOS対策：無音のバッファを一瞬再生してエンジンを強制的に起こす
+            // これを行わないと、resume()だけでは音が鳴らない場合がある
+            const buffer = audioCtx.createBuffer(1, 1, 22050);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+
+            isAudioUnlocked = true;
+            
+            // オーバーレイを非表示に
+            if (startOverlay) {
+                startOverlay.style.opacity = '0';
+                setTimeout(() => startOverlay.style.display = 'none', 300);
+            }
+
+            // イベントリスナー削除
+            ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => 
+                document.body.removeEventListener(evt, unlockAudio)
+            );
+        }
+
+        // ユーザーが最初に何かしら操作したタイミングでアンロックを実行
+        ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => 
+            document.body.addEventListener(evt, unlockAudio, { once: true, capture: true })
+        );
+        
+        // 初回ロード時にユーザーに操作を促す表示（一瞬だけ出して、自然に消す）
+        if(audioCtx && audioCtx.state === 'suspended') {
+             startOverlay.style.opacity = '1';
+             startOverlay.style.pointerEvents = 'auto';
+        }
+
 
         // ---------------------------------------------------------
         // タッチ & グリッサンド処理
@@ -282,6 +343,10 @@
 
         function triggerKey(keyElement) {
             if (!keyElement) return;
+            
+            // まだロック解除されてない場合に備えてここでも呼ぶ
+            if (!isAudioUnlocked) unlockAudio();
+
             const freq = parseFloat(keyElement.dataset.freq);
             if (!freq) return;
 
@@ -294,7 +359,7 @@
         }
 
         const activeTouches = new Map();
-        const touchArea = document.querySelector('.xylophone-frame'); // 監視対象をフレームに変更
+        const touchArea = document.querySelector('.xylophone-frame');
 
         const handleTouch = (e) => {
             if (e.cancelable && e.type !== 'touchend') e.preventDefault();
@@ -326,7 +391,6 @@
             }
         };
 
-        // マウス操作用
         let isMouseDown = false;
         let lastHoveredKey = null;
 
@@ -358,14 +422,6 @@
         touchArea.addEventListener('mousedown', handleMouse);
         touchArea.addEventListener('mousemove', handleMouse);
         window.addEventListener('mouseup', handleMouse);
-
-        const unlockAudio = () => {
-            initAudio();
-            document.removeEventListener('click', unlockAudio);
-            document.removeEventListener('touchstart', unlockAudio);
-        };
-        document.addEventListener('click', unlockAudio);
-        document.addEventListener('touchstart', unlockAudio);
 
     </script>
 </body>
