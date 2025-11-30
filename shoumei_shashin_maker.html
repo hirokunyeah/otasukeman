@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>画像トリミング＆サイズ指定プレビュー</title>
+    <!-- Tailwind CSS (スタイリング用) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF (PDF生成用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- html2canvas (DOM要素をCanvasに変換するため) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        /* フォント設定 */
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        
+        /* カスタムスタイル */
+        .preview-box {
+            border: 2px solid #3b82f6;
+            background-color: #e0f2fe;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* トリミング領域のオーバーレイ */
+        #cropCanvas {
+            cursor: crosshair;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+        }
+        
+        /* 印刷プレビューの影と丸み */
+        #printPreviewImage {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e5e7eb;
+        }
+
+        /* 円形プレビュー用のカスタムスタイル */
+        .preview-circle img {
+            border-radius: 50%; /* プレビューエリアでは常に円形にする */
+        }
+        
+        /* PDF生成のための一時的な非表示コンテナ */
+        #pdfLayoutContainer {
+            position: fixed;
+            top: -9999px; /* 画面外に配置 */
+            left: -9999px;
+            z-index: -1;
+            /* サイズはJSで動的に設定される */
+        }
+        
+        /* PDF生成用の一時レイアウトスタイル */
+        .pdf-page-grid {
+            /* JSで動的に設定される */
+            display: grid; 
+            gap: 0.1cm; 
+            background-color: white; 
+        }
+        
+        .pdf-image-item {
+            /* JSで動的に設定される */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto bg-white rounded-xl shadow-2xl p-6 md:p-10">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6 border-b-2 pb-2">画像切り取りとマルチレイアウトPDF作成</h1>
+        
+        <!-- 全体のレイアウトコンテナ -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- 左カラム：画像操作 -->
+            <div class="space-y-6">
+                
+                <!-- 1. 画像の読み込みと切り取り範囲の選択 -->
+                <div class="space-y-4 border-b pb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">1. 画像の読み込みと切り取り範囲の選択</h2>
+                    
+                    <input type="file" id="imageInput" accept="image/*" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
+                    
+                    <div id="imageContainer" class="relative w-full aspect-[4/3] bg-gray-100 border-dashed border-2 border-gray-400 rounded-lg overflow-hidden flex justify-center items-center">
+                        <img id="originalImage" class="max-w-full max-h-full object-contain" style="display: none;" />
+                        <canvas id="cropCanvas" style="display: none;"></canvas>
+                        <p id="placeholderText" class="text-gray-500">ここに画像をドラッグ＆ドロップするか、ファイルを選択してください。</p>
+                    </div>
+                </div>
+
+                <!-- 2. サイズと形状の指定 -->
+                <div class="space-y-4 border-b pb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">2. サイズと形状の指定</h2>
+                    
+                    <!-- 形状選択オプション -->
+                    <div class="p-3 bg-gray-100 rounded-md">
+                        <p class="text-sm font-medium text-gray-700 mb-2">切り取り形状を選択:</p>
+                        <div class="flex space-x-4">
+                            <label class="inline-flex items-center">
+                                <input type="radio" name="cropShape" value="rect" checked class="form-radio text-blue-600 h-4 w-4">
+                                <span class="ml-2 text-gray-700">四角形</span>
+                            </label>
+                            <label class="inline-flex items-center">
+                                <input type="radio" name="cropShape" value="circle" class="form-radio text-blue-600 h-4 w-4">
+                                <span class="ml-2 text-gray-700">円形 (丸)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- サイズ入力フォーム -->
+                    <div class="flex space-x-4 mt-4">
+                        <div class="flex-1">
+                            <label for="widthCm" class="block text-sm font-medium text-gray-700">幅 (cm)</label>
+                            <input type="number" id="widthCm" value="5" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
+                        </div>
+                        <div class="flex-1">
+                            <label for="heightCm" class="block text-sm font-medium text-gray-700">高さ (cm)</label>
+                            <input type="number" id="heightCm" value="5" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
+                        </div>
+                    </div>
+
+                    <!-- アスペクト比固定オプション -->
+                    <div class="flex items-center p-3 bg-gray-50 rounded-md">
+                        <input type="checkbox" id="keepRatioCheckbox" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <label for="keepRatioCheckbox" class="ml-2 block text-sm font-medium text-gray-700">
+                            指定サイズのアスペクト比 (幅/高さ) を固定する
+                        </label>
+                    </div>
+                </div>
+
+            </div>
+            
+            <!-- 右カラム：レイアウトとプレビュー -->
+            <div class="space-y-6">
+
+                <!-- 3. 印刷レイアウト設定エリア -->
+                <div class="space-y-4 border-b pb-4">
+                    <h2 class="text-xl font-semibold text-gray-700">3. 印刷レイアウト設定</h2>
+                    <div class="flex space-x-4">
+                        <!-- 用紙サイズ選択 -->
+                        <div class="flex-1">
+                            <label for="paperSize" class="block text-sm font-medium text-gray-700">用紙サイズ</label>
+                            <select id="paperSize" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                                <option value="A4">A4 (21.0 x 29.7 cm)</option>
+                                <option value="A3">A3 (29.7 x 42.0 cm)</option>
+                                <option value="B5">B5 (18.2 x 25.7 cm)</option>
+                                <option value="L">L判 (8.9 x 12.7 cm)</option>
+                                <option value="2L">2L判 (12.7 x 17.8 cm)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex space-x-4">
+                        <!-- 横の個数 -->
+                        <div class="flex-1">
+                            <label for="layoutCols" class="block text-sm font-medium text-gray-700">横に並べる個数</label>
+                            <input type="number" id="layoutCols" value="2" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                        </div>
+                        <!-- 縦の個数 -->
+                        <div class="flex-1">
+                            <label for="layoutRows" class="block text-sm font-medium text-gray-700">縦に並べる個数</label>
+                            <input type="number" id="layoutRows" value="2" min="1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" />
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- プレビューとPDF生成ボタン -->
+                <div class="space-y-2 mt-4">
+                    <button id="updatePreviewButton" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 shadow-md disabled:bg-blue-300" disabled>
+                        プレビューを更新
+                    </button>
+                    <button id="pdfButton" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-150 shadow-md disabled:bg-indigo-300" disabled>
+                        PDFダウンロード (推奨)
+                    </button>
+                </div>
+
+                <!-- プレビュー表示エリア -->
+                <div id="previewBox" class="preview-box aspect-[1/1] rounded-lg p-4">
+                    <!-- 単一画像プレビュー -->
+                    <img id="printPreviewImage" style="display: none;" class="rounded-md max-w-full max-h-full object-contain" alt="単一印刷プレビュー" />
+                    <p id="previewText" class="text-gray-600 text-center">トリミングとサイズを指定して、プレビューを更新してください。</p>
+
+                    <!-- PDF生成時のローディング表示 -->
+                    <div id="loadingIndicator" class="hidden flex-col items-center text-center text-indigo-700">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-2 text-sm">PDFを生成中...</p>
+                    </div>
+                </div>
+                
+                <!-- 情報表示 -->
+                <p id="infoMessage" class="text-sm text-red-500 mt-2 text-center"></p>
+                <p class="text-xs text-gray-500 mt-4 p-2 bg-indigo-50 rounded-md">
+                    **最も確実な印刷方法:** 「PDFダウンロード」ボタンで生成されたPDFファイルを、PDFビューア（Acrobat Readerなど）で開き、「**実際のサイズ**」または「**拡大縮小なし**」を設定して印刷してください。
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PDF生成のための非表示要素 -->
+    <div id="pdfLayoutContainer"></div>
+
+    <script>
+        // グローバル変数
+        const imageInput = document.getElementById('imageInput');
+        const originalImage = document.getElementById('originalImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const placeholderText = document.getElementById('placeholderText');
+        const cropCanvas = document.getElementById('cropCanvas');
+        const updatePreviewButton = document.getElementById('updatePreviewButton');
+        const pdfButton = document.getElementById('pdfButton');
+        const printPreviewImage = document.getElementById('printPreviewImage');
+        const previewText = document.getElementById('previewText');
+        const infoMessage = document.getElementById('infoMessage');
+        const widthCmInput = document.getElementById('widthCm');
+        const heightCmInput = document.getElementById('heightCm');
+        const keepRatioCheckbox = document.getElementById('keepRatioCheckbox');
+        const shapeRadios = document.querySelectorAll('input[name="cropShape"]');
+        const previewBox = document.getElementById('previewBox');
+        const pdfLayoutContainer = document.getElementById('pdfLayoutContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // レイアウト用UI
+        const paperSizeSelect = document.getElementById('paperSize');
+        const layoutColsInput = document.getElementById('layoutCols');
+        const layoutRowsInput = document.getElementById('layoutRows');
+
+        const ctx = cropCanvas.getContext('2d');
+
+        // 用紙サイズとその実寸 (mm) の定義 (PDFの単位は通常mmやptなので、cmをmmに変換する)
+        const PAPER_SIZES = {
+            'A4': { width: 210, height: 297 }, // mm単位
+            'A3': { width: 297, height: 420 }, // mm単位
+            'B5': { width: 182, height: 257 }, // mm単位
+            'L': { width: 89, height: 127 },   // mm単位
+            '2L': { width: 127, height: 178 }, // mm単位
+        };
+
+        // トリミングの状態
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let cropRect = { x: 0, y: 0, width: 0, height: 0 };
+        let imageLoaded = false;
+        let croppedDataUrl = null; // 切り抜き後のDataURLを保持
+
+        /**
+         * 形状選択時の処理: 円形の場合はアスペクト比を固定
+         */
+        shapeRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (radio.value === 'circle') {
+                    previewBox.classList.add('preview-circle');
+                    keepRatioCheckbox.checked = true;
+                    keepRatioCheckbox.disabled = true;
+                    if (widthCmInput.value !== heightCmInput.value) {
+                        heightCmInput.value = widthCmInput.value;
+                    }
+                } else {
+                    previewBox.classList.remove('preview-circle');
+                    keepRatioCheckbox.disabled = false;
+                }
+                if (imageLoaded) {
+                    drawCropOverlay();
+                }
+            });
+        });
+        
+        // 幅/高さの入力値が変更されたら、円形選択時は高さを幅に合わせる
+        widthCmInput.addEventListener('input', () => {
+            if (document.querySelector('input[name="cropShape"]:checked').value === 'circle') {
+                heightCmInput.value = widthCmInput.value;
+            }
+        });
+
+        heightCmInput.addEventListener('input', () => {
+             if (document.querySelector('input[name="cropShape"]:checked').value === 'circle') {
+                widthCmInput.value = heightCmInput.value;
+            }
+        });
+
+
+        /**
+         * 画像の読み込み処理
+         */
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    originalImage.onload = () => {
+                        currentImage = originalImage.src;
+                        handleImageLoad();
+                    };
+                    originalImage.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        /**
+         * 画像が読み込まれた後の初期設定
+         */
+        function handleImageLoad() {
+            imageLoaded = true;
+            placeholderText.style.display = 'none';
+            originalImage.style.display = 'block';
+            cropCanvas.style.display = 'block';
+            updatePreviewButton.disabled = false;
+            pdfButton.disabled = false;
+            infoMessage.textContent = '';
+
+            resizeCanvas();
+
+            // 初期選択範囲を画像全体に設定
+            cropRect = { 
+                x: 0, 
+                y: 0, 
+                width: cropCanvas.width, 
+                height: cropCanvas.height 
+            };
+            drawCropOverlay();
+        }
+
+        /**
+         * キャンバスを画像コンテナのサイズにリサイズ
+         */
+        function resizeCanvas() {
+            const containerWidth = imageContainer.clientWidth;
+            const containerHeight = imageContainer.clientHeight;
+            
+            const imageRatio = originalImage.naturalWidth / originalImage.naturalHeight;
+            let displayWidth, displayHeight;
+
+            if (imageRatio > containerWidth / containerHeight) {
+                // 画像が横長の場合
+                displayWidth = containerWidth;
+                displayHeight = containerWidth / imageRatio;
+            } else {
+                // 画像が縦長または正方形の場合
+                displayWidth = containerHeight * imageRatio;
+                displayHeight = containerHeight;
+            }
+
+            cropCanvas.width = displayWidth;
+            cropCanvas.height = displayHeight;
+            cropCanvas.style.width = `${displayWidth}px`;
+            cropCanvas.style.height = `${displayHeight}px`;
+
+            const offsetX = (containerWidth - displayWidth) / 2;
+            const offsetY = (containerHeight - displayHeight) / 2;
+            cropCanvas.style.left = `${offsetX}px`;
+            cropCanvas.style.top = `${offsetY}px`;
+        }
+
+        window.addEventListener('resize', () => {
+            if (imageLoaded) {
+                resizeCanvas();
+                drawCropOverlay();
+            }
+        });
+
+        /**
+         * トリミング領域の描画 (形状対応)
+         */
+        function drawCropOverlay() {
+            const currentShape = document.querySelector('input[name="cropShape"]:checked').value;
+
+            ctx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+            
+            ctx.globalCompositeOperation = 'destination-out';
+
+            if (currentShape === 'rect') {
+                // 四角形の場合
+                ctx.fillRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+                ctx.globalCompositeOperation = 'source-over';
+                
+                // 選択領域の境界線を描画
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(cropRect.x, cropRect.y, cropRect.width, cropRect.height);
+
+            } else if (currentShape === 'circle') {
+                // 円形の場合
+                const radius = Math.min(cropRect.width, cropRect.height) / 2;
+                const centerX = cropRect.x + cropRect.width / 2;
+                const centerY = cropRect.y + cropRect.height / 2;
+
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+
+                ctx.globalCompositeOperation = 'source-over';
+                
+                // 選択領域の境界線を描画 (円形)
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.closePath();
+            }
+        }
+
+        // --- マウス操作（トリミング選択） ---
+
+        cropCanvas.addEventListener('mousedown', (e) => {
+            if (!imageLoaded) return;
+            isDrawing = true;
+            const rect = cropCanvas.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            
+            cropRect = { x: startX, y: startY, width: 0, height: 0 };
+            drawCropOverlay();
+        });
+
+        cropCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = cropCanvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+
+            let width = currentX - startX;
+            let height = currentY - startY;
+
+            // アスペクト比固定のロジック
+            if (keepRatioCheckbox.checked) {
+                const targetWidthCm = parseFloat(widthCmInput.value);
+                const targetHeightCm = parseFloat(heightCmInput.value);
+
+                if (targetWidthCm > 0 && targetHeightCm > 0) {
+                    const targetRatio = targetWidthCm / targetHeightCm;
+                    
+                    const absWidth = Math.abs(width);
+                    const absHeight = Math.abs(height);
+                    
+                    if (absWidth > absHeight * targetRatio) {
+                        height = (width / targetRatio) * (height < 0 ? -1 : 1);
+                    } else {
+                        width = (height * targetRatio) * (width < 0 ? -1 : 1);
+                    }
+                } else {
+                    // サイズ未入力の場合の処理はなし
+                }
+            }
+
+            // 常に正の値になるように調整
+            cropRect = {
+                x: width < 0 ? startX + width : startX,
+                y: height < 0 ? startY + height : startY,
+                width: Math.abs(width),
+                height: Math.abs(height)
+            };
+            
+            // キャンバスの境界線でクリップ
+            cropRect.x = Math.max(0, cropRect.x);
+            cropRect.y = Math.max(0, cropRect.y);
+            
+            if (cropRect.x + cropRect.width > cropCanvas.width) {
+                cropRect.width = cropCanvas.width - cropRect.x;
+            }
+            if (cropRect.y + cropRect.height > cropCanvas.height) {
+                cropRect.height = cropCanvas.height - cropRect.y;
+            }
+
+            drawCropOverlay();
+        });
+
+        cropCanvas.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                isDrawing = false;
+                if (cropRect.width < 5 || cropRect.height < 5) {
+                    cropRect = { x: 0, y: 0, width: cropCanvas.width, height: cropCanvas.height };
+                    infoMessage.textContent = '選択範囲が小さすぎたため、画像全体が選択されました。';
+                    drawCropOverlay();
+                } else {
+                    infoMessage.textContent = '切り取り範囲が設定されました。プレビューを更新してください。';
+                }
+            }
+        });
+        
+        // タッチ操作のサポート (前回のコードから変更なし)
+        const simulateMouseEvent = (type, touch) => {
+            return new MouseEvent(type, { 
+                clientX: touch.clientX, 
+                clientY: touch.clientY, 
+                view: window, 
+                bubbles: true, 
+                cancelable: true 
+            });
+        };
+        cropCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            cropCanvas.dispatchEvent(simulateMouseEvent('mousedown', touch));
+        });
+
+        cropCanvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            const touch = e.touches[0];
+            cropCanvas.dispatchEvent(simulateMouseEvent('mousemove', touch));
+        });
+
+        cropCanvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            cropCanvas.dispatchEvent(new MouseEvent('mouseup', { view: window, bubbles: true, cancelable: true }));
+        });
+
+
+        /**
+         * プレビュー画像の更新処理
+         */
+        updatePreviewButton.addEventListener('click', () => {
+            if (!imageLoaded) {
+                infoMessage.textContent = '先に画像を読み込んでください。';
+                return;
+            }
+
+            const widthCm = parseFloat(widthCmInput.value);
+            const heightCm = parseFloat(heightCmInput.value);
+
+            if (isNaN(widthCm) || widthCm <= 0 || isNaN(heightCm) || heightCm <= 0) {
+                infoMessage.textContent = '幅と高さを正しくcm単位で入力してください。';
+                return;
+            }
+            
+            // 切り抜きを実行し、croppedDataUrlに保存する
+            croppedDataUrl = performCrop();
+
+            // プレビューの表示サイズを調整
+            const DPI_SCALE = 15; // 画面表示用
+            const previewWidthPx = widthCm * DPI_SCALE;
+            const previewHeightPx = heightCm * DPI_SCALE;
+            
+            // プレビューエリアに設定
+            printPreviewImage.src = croppedDataUrl; 
+            printPreviewImage.style.width = `${previewWidthPx}px`;
+            printPreviewImage.style.height = `${previewHeightPx}px`;
+            printPreviewImage.style.display = 'block';
+            previewText.style.display = 'none';
+
+            const currentShape = document.querySelector('input[name="cropShape"]:checked').value;
+            infoMessage.textContent = `プレビューを更新しました。印刷サイズ: ${widthCm}cm x ${heightCm}cm (形状: ${currentShape === 'circle' ? '円形' : '四角形'})`;
+        });
+
+        /**
+         * 実際のトリミングを実行し、DataURLを返す
+         * @returns {string} 切り抜かれた画像のDataURL
+         */
+        function performCrop() {
+            const currentShape = document.querySelector('input[name="cropShape"]:checked').value;
+            
+            // 1. 実画像上での座標計算
+            const naturalWidth = originalImage.naturalWidth;
+            const displayToNaturalRatio = naturalWidth / cropCanvas.width;
+
+            const cropX = cropRect.x * displayToNaturalRatio;
+            const cropY = cropRect.y * displayToNaturalRatio;
+            const cropWidth = cropRect.width * displayToNaturalRatio;
+            const cropHeight = cropRect.height * displayToNaturalRatio;
+
+            // 2. 切り取りを実行する一時キャンバスを作成
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = cropWidth;
+            tempCanvas.height = cropHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // 実画像の一部を抽出して描画
+            tempCtx.drawImage(
+                originalImage,
+                cropX, cropY, cropWidth, cropHeight, // 元画像の切り取り部分
+                0, 0, cropWidth, cropHeight          // 一時キャンバス全体
+            );
+
+            // 円形トリミングのクリップ処理
+            if (currentShape === 'circle') {
+                const radius = Math.min(cropWidth, cropHeight) / 2;
+                const centerX = cropWidth / 2;
+                const centerY = cropHeight / 2;
+
+                tempCtx.globalCompositeOperation = 'destination-in';
+                
+                tempCtx.beginPath();
+                tempCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                tempCtx.closePath();
+                tempCtx.fill(); 
+                
+                tempCtx.globalCompositeOperation = 'source-over';
+            }
+
+            return tempCanvas.toDataURL('image/png');
+        }
+
+        /**
+         * PDF生成処理 (html2canvas & jsPDFを使用)
+         */
+        pdfButton.addEventListener('click', async () => {
+            if (!croppedDataUrl) {
+                infoMessage.textContent = '先にプレビューを更新して画像を準備してください。';
+                return;
+            }
+            
+            // ロード中インジケータ表示
+            loadingIndicator.classList.remove('hidden');
+            printPreviewImage.style.display = 'none';
+            pdfButton.disabled = true;
+            updatePreviewButton.disabled = true;
+            infoMessage.textContent = 'PDF生成を開始しています...';
+
+            try {
+                const widthCm = parseFloat(widthCmInput.value);
+                const heightCm = parseFloat(heightCmInput.value);
+                const currentShape = document.querySelector('input[name="cropShape"]:checked').value;
+                
+                // レイアウト設定の取得
+                const paperSizeKey = paperSizeSelect.value;
+                const paper = PAPER_SIZES[paperSizeKey]; // mm単位
+                const layoutCols = parseInt(layoutColsInput.value) || 1;
+                const layoutRows = parseInt(layoutRowsInput.value) || 1;
+                const MARGIN_MM = 5; // 用紙の四辺の余白 (mm)
+                const GAP_MM = 1; // 画像間の隙間 (mm)
+
+                // cmをmmに変換
+                const widthMm = widthCm * 10;
+                const heightMm = heightCm * 10;
+                
+                // PDFのレイアウト領域のサイズ (mm)
+                const contentWidthMm = paper.width - 2 * MARGIN_MM;
+                const contentHeightMm = paper.height - 2 * MARGIN_MM;
+
+                // 必要な総サイズ (mm)
+                const requiredGridWidth = layoutCols * widthMm + (layoutCols - 1) * GAP_MM;
+                const requiredGridHeight = layoutRows * heightMm + (layoutRows - 1) * GAP_MM;
+
+                if (requiredGridWidth > contentWidthMm || requiredGridHeight > contentHeightMm) {
+                    // 収まらない場合はユーザーに通知
+                    const confirmMessage = 
+                        `設定されたレイアウト（横${(requiredGridWidth/10).toFixed(2)}cm x 縦${(requiredGridHeight/10).toFixed(2)}cm）は、\n` + 
+                        `${paperSizeKey}用紙（${paper.width/10}cm x ${paper.height/10}cm）の余白内（${contentWidthMm/10}cm x ${contentHeightMm/10}cm）に収まりません。\n` + 
+                        `PDF生成時に画像が切れる可能性があります。\n\n` +
+                        `このままPDF生成を続行しますか？`;
+                    
+                    if (!window.confirm(confirmMessage)) {
+                        throw new Error("ユーザーがキャンセルしました。");
+                    }
+                }
+                
+                // --- 1. 非表示のレイアウトHTML要素を構築 ---
+                
+                // PDF出力用にimgタグを生成
+                const borderRadiusStyle = currentShape === 'circle' ? 'border-radius: 50%;' : '';
+                const imgStyle = `width: ${widthCm}cm; height: ${heightCm}cm; ${borderRadiusStyle}`;
+                
+                let imageHtml = '';
+                for (let i = 0; i < layoutRows * layoutCols; i++) {
+                    imageHtml += `<img src="${croppedDataUrl}" style="${imgStyle}" class="pdf-image-item" alt="印刷画像" />`;
+                }
+
+                pdfLayoutContainer.innerHTML = `
+                    <div id="pdf-content" 
+                         class="pdf-page-grid" 
+                         style="width: ${contentWidthMm}mm; height: ${contentHeightMm}mm; 
+                                grid-template-columns: repeat(${layoutCols}, ${widthCm}cm); 
+                                grid-template-rows: repeat(${layoutRows}, ${heightCm}cm); 
+                                gap: ${GAP_MM}mm;
+                                justify-content: center;
+                                align-content: center;">
+                        ${imageHtml}
+                    </div>
+                `;
+                
+                // --- 2. html2canvasでHTML要素をCanvasに変換 ---
+                const pdfContentElement = document.getElementById('pdf-content');
+                
+                const canvas = await html2canvas(pdfContentElement, {
+                    scale: 3, // 高解像度でキャプチャ
+                    useCORS: true,
+                    backgroundColor: '#ffffff' // 背景を白に設定
+                });
+
+                const imgData = canvas.toDataURL('image/jpeg', 1.0); // JPEGで圧縮率を上げてファイルサイズを削減
+
+                // --- 3. jsPDFでPDFを生成 ---
+                const { jsPDF } = window.jspdf;
+                
+                // PDFをmm単位で初期化。用紙サイズと方向を設定。
+                const pdf = new jsPDF({
+                    orientation: paper.width < paper.height ? 'p' : 'l', // 縦長か横長かで方向を決定
+                    unit: 'mm',
+                    format: [paper.width, paper.height]
+                });
+                
+                // PDFに画像を貼り付けるサイズを計算
+                // Canvasのピクセルサイズを取得
+                const canvasWidth = canvas.width;
+                const canvasHeight = canvas.height;
+                
+                // PDFの物理サイズに合わせるため、CanvasをPDFページ全体に広げる
+                const imgWidth = paper.width - 2 * MARGIN_MM;
+                const imgHeight = paper.height - 2 * MARGIN_MM;
+                
+                // 画像を中央配置
+                const imgX = MARGIN_MM;
+                const imgY = MARGIN_MM;
+
+                pdf.addImage(imgData, 'JPEG', imgX, imgY, imgWidth, imgHeight);
+
+                // PDFをダウンロード
+                pdf.save(`MultiPrint_${paperSizeKey}_${layoutCols}x${layoutRows}.pdf`);
+                
+                infoMessage.textContent = 'PDFの生成とダウンロードが完了しました！';
+
+            } catch (error) {
+                if (error.message !== "ユーザーがキャンセルしました。") {
+                    console.error("PDF生成エラー:", error);
+                    infoMessage.textContent = `エラーが発生しました: ${error.message}`;
+                } else {
+                     infoMessage.textContent = 'PDF生成をキャンセルしました。';
+                }
+            } finally {
+                // ロード中インジケータ非表示、ボタンを有効化
+                loadingIndicator.classList.add('hidden');
+                printPreviewImage.style.display = 'block';
+                pdfButton.disabled = false;
+                updatePreviewButton.disabled = false;
+                pdfLayoutContainer.innerHTML = ''; // 一時HTMLをクリア
+            }
+        });
+
+    </script>
+</body>
+</html>
