@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6軸ロボットアーム シミュレーター v2.2 (アシスト機能付き)</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
+        canvas { display: block; }
+        
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 95vh;
+            pointer-events: none;
+        }
+
+        .panel {
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            color: #fff;
+            border: 1px solid #444;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            pointer-events: auto;
+            overflow-y: auto;
+        }
+
+        h2 { margin-top: 0; font-size: 16px; color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 10px;}
+        h3 { font-size: 14px; color: #ffcc00; margin: 10px 0 5px 0; border-top: 1px solid #444; padding-top: 5px; }
+        
+        .control-group { margin-bottom: 8px; }
+        label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; }
+        input[type=range] { width: 100%; cursor: pointer; margin:0; }
+        
+        .config-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
+        .config-label { width: 80px; }
+        .config-input-group { display: flex; gap: 5px; align-items: center; }
+        input[type=number] { 
+            width: 50px; background: #333; border: 1px solid #555; color: #fff; 
+            padding: 2px; border-radius: 3px; text-align: right;
+        }
+        .unit { color: #888; width: 15px; }
+
+        .torque-item { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; align-items: center; }
+        .torque-bar-bg { flex-grow: 1; height: 5px; background: #333; margin: 0 8px; border-radius: 2px; overflow: hidden; }
+        .torque-bar { height: 100%; width: 0%; background: #00ff00; transition: width 0.1s, background 0.2s; }
+        .torque-val { font-family: monospace; width: 50px; text-align: right; }
+        .status-safe { color: #00ff00; }
+        .status-warn { color: #ffff00; }
+        .status-danger { color: #ff0044; font-weight: bold; }
+
+        button { width:100%; padding:6px; background:#444; color:white; border:none; cursor:pointer; border-radius:3px; margin-top:5px; }
+        button:hover { background: #555; }
+
+        #info { position: absolute; bottom: 10px; left: 10px; color: #888; font-size: 12px; pointer-events: none; }
+        
+        .tab-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
+        .tab-btn { flex: 1; background: #222; border: 1px solid #444; color: #888; padding: 5px; cursor: pointer; border-radius: 4px; font-size: 12px;}
+        .tab-btn.active { background: #0055ff; color: white; border-color: #0055ff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        
+        /* アシスト設定エリア */
+        .assist-control { background: #2a2a2a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #444; }
+
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="ui-container">
+        <div class="panel">
+            <div class="tab-buttons">
+                <div class="tab-btn active" onclick="switchTab('pose')">Pose Control</div>
+                <div class="tab-btn" onclick="switchTab('config')">Physics Config</div>
+            </div>
+
+            <!-- タブ1: ポーズ制御 -->
+            <div id="tab-pose" class="tab-content active">
+                <h2>Joint Control</h2>
+                <div class="control-group"><label>1. Base (Yaw) <span id="val1">0°</span></label><input type="range" id="j1" min="-180" max="180" value="0"></div>
+                <div class="control-group"><label>2. Root (Pitch) <span id="val2">0°</span></label><input type="range" id="j2" min="-180" max="180" value="0"></div>
+                <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">0°</span></label><input type="range" id="j3" min="-180" max="180" value="0"></div>
+                <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">0°</span></label><input type="range" id="j4" min="-180" max="180" value="0"></div>
+                <div class="control-group"><label>5. Roll <span id="val5">0°</span></label><input type="range" id="j5" min="-180" max="180" value="0"></div>
+                <div class="control-group"><label>6. Gripper <span id="val6">50%</span></label><input type="range" id="j6" min="0" max="100" value="50"></div>
+                <button onclick="resetPose()">Reset Pose</button>
+
+                <h3>Torque Monitor</h3>
+                
+                <!-- アシスト設定 -->
+                <div class="assist-control">
+                    <label style="color:#ffcc00;">Spring/Counterweight Assist</label>
+                    <div style="display:flex; align-items:center; gap:5px; font-size:11px; margin-bottom:3px;">
+                        <span>Help:</span>
+                        <input type="range" id="assist-val" min="0" max="2.0" step="0.1" value="0" style="flex:1;">
+                        <span id="assist-disp" style="width:50px; text-align:right;">0.0</span> kg·cm
+                    </div>
+                    <div style="font-size:10px; color:#888;">Reduces load on Pitch joints (2,3,4)</div>
+                </div>
+
+                <div id="torque-list"></div>
+            </div>
+
+            <!-- タブ2: 物理設定 -->
+            <div id="tab-config" class="tab-content">
+                <h2>Physics Configuration</h2>
+                <div style="font-size:11px; color:#aaa; margin-bottom:10px;">Change Length(m) & Mass(kg)</div>
+                <div id="config-list"></div>
+                <h3 style="margin-top:15px;">Other Settings</h3>
+                <div class="config-row">
+                    <span class="config-label">Servo Mass</span>
+                    <div class="config-input-group">
+                        <input type="number" id="cfg-servo-mass" value="0.009" step="0.001" onchange="updatePhysicsParams()">
+                        <span class="unit">kg</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="info">Mouse: Rotate / Zoom / Pan</div>
+
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+            const btns = document.querySelectorAll('.tab-btn');
+            if(tabName === 'pose') btns[0].classList.add('active');
+            else btns[1].classList.add('active');
+        }
+
+        const TORQUE_LIMIT_SINGLE = 1.3; 
+        const GRAVITY = 9.80665;
+        const BASE_SCALE_FACTOR = 0.12 / 2.5; 
+
+        // 初期設定
+        const PART_CONFIG = [
+            { id: 'root',     name: 'Root',     len: 0.04, mass: 0.030, type: 'link' },
+            { id: 'arm1',     name: 'Arm 1',    len: 0.12, mass: 0.040, type: 'arm' },
+            { id: 'arm2',     name: 'Arm 2',    len: 0.10, mass: 0.035, type: 'arm' },
+            { id: 'wrist',    name: 'Wrist',    len: 0.03, mass: 0.015, type: 'link' },
+            { id: 'gripper',  name: 'Gripper',  len: 0.06, mass: 0.025, type: 'gripper' }
+        ];
+        
+        let servoMass = 0.009; 
+        let assistTorque = 0.0; // アシストトルク量
+
+        const REFS = {}; 
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x222222);
+        
+        const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
+        scene.add(gridHelper);
+        const axesHelper = new THREE.AxesHelper(1);
+        scene.add(axesHelper);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(5, 4, 5);
+        camera.lookAt(0, 1, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0x666666);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        const matGrey = new THREE.MeshPhongMaterial({ color: 0x888888 });
+        const matOrange = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
+        const matBlue = new THREE.MeshPhongMaterial({ color: 0x0055ff, transparent:true, opacity:0.8 });
+        const matDark = new THREE.MeshPhongMaterial({ color: 0x333333 });
+
+        function createBox(w, h, d, mat, parent, pos, name) {
+            const geom = new THREE.BoxGeometry(w, h, d);
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(pos.x, pos.y, pos.z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            if(parent) parent.add(mesh);
+            if(name) REFS[name] = mesh; 
+            return mesh;
+        }
+
+        function createCylinder(rt, rb, h, mat, parent, pos, rot) {
+            const geom = new THREE.CylinderGeometry(rt, rb, h, 32);
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.set(pos.x, pos.y, pos.z);
+            mesh.rotation.set(rot.x, rot.y, rot.z);
+            mesh.castShadow = true;
+            if(parent) parent.add(mesh);
+            return mesh;
+        }
+
+        function createServo(parent, pos, rot) {
+            const group = new THREE.Group();
+            group.position.set(pos.x, pos.y, pos.z);
+            group.rotation.set(rot.x, rot.y, rot.z);
+            if(parent) parent.add(group);
+            const body = createBox(0.3, 0.5, 0.6, matBlue, group, {x:0, y:0, z:0});
+            body.userData.isServo = true;
+            body.userData.mass = servoMass;
+            createCylinder(0.1, 0.1, 0.1, matGrey, group, {x:0, y:0.3, z:0.15}, {x:0,y:0,z:0});
+            return group;
+        }
+
+        // --- ロボット構築 ---
+        const baseGroup = new THREE.Group();
+        scene.add(baseGroup);
+        createCylinder(1.5, 1.5, 0.2, matDark, baseGroup, {x:0, y:0.1, z:0}, {x:0,y:0,z:0});
+
+        // J1: Yaw
+        const pivotJ1 = new THREE.Group();
+        pivotJ1.userData.axis = new THREE.Vector3(0, 1, 0);
+        pivotJ1.position.y = 0.2;
+        baseGroup.add(pivotJ1);
+        REFS['j1'] = pivotJ1;
+        createCylinder(0.8, 0.8, 0.5, matGrey, pivotJ1, {x:0, y:0.25, z:0}, {x:0,y:0,z:0});
+        createServo(pivotJ1, {x:0, y:0.2, z:0}, {x:0, y:0, z:0});
+
+        // J2: Root Pitch (Single Servo)
+        const pivotJ2 = new THREE.Group();
+        pivotJ2.userData.axis = new THREE.Vector3(1, 0, 0);
+        pivotJ2.position.set(0, 0.6, 0);
+        pivotJ1.add(pivotJ2);
+        REFS['j2'] = pivotJ2;
+        createBox(0.8, 0.8, 0.5, matGrey, pivotJ2, {x:0, y:0, z:0}, 'mesh_root');
+        createServo(pivotJ2, {x:0, y:0, z:0}, {x:Math.PI/2, y:0, z:0});
+
+        const arm1Group = new THREE.Group();
+        pivotJ2.add(arm1Group);
+        REFS['grp_arm1'] = arm1Group;
+        createBox(0.2, 0.2, 1.0, matOrange, arm1Group, {x:0, y:0.1, z:0.5}, 'mesh_arm1'); 
+
+        // J3: Elbow
+        const pivotJ3 = new THREE.Group();
+        pivotJ3.userData.axis = new THREE.Vector3(1, 0, 0);
+        pivotJ3.position.set(0, 0, 1.0);
+        arm1Group.add(pivotJ3);
+        REFS['j3'] = pivotJ3;
+        createServo(pivotJ3, {x:0, y:0, z:0}, {x:Math.PI/2, y:0, z:0});
+
+        const arm2Group = new THREE.Group();
+        pivotJ3.add(arm2Group);
+        REFS['grp_arm2'] = arm2Group;
+        createBox(0.2, 0.2, 1.0, matOrange, arm2Group, {x:0, y:0.1, z:0.5}, 'mesh_arm2');
+
+        // J4: Wrist Pitch
+        const pivotJ4 = new THREE.Group();
+        pivotJ4.userData.axis = new THREE.Vector3(1, 0, 0);
+        pivotJ4.position.set(0, 0, 1.0);
+        arm2Group.add(pivotJ4);
+        REFS['j4'] = pivotJ4;
+        createServo(pivotJ4, {x:0, y:0, z:0}, {x:Math.PI/2, y:0, z:0});
+
+        const wristLink = new THREE.Group();
+        pivotJ4.add(wristLink);
+        createBox(0.4, 0.4, 0.5, matGrey, wristLink, {x:0, y:0, z:0.25}, 'mesh_wrist');
+
+        // J5: Wrist Roll
+        const pivotJ5 = new THREE.Group();
+        pivotJ5.userData.axis = new THREE.Vector3(0, 0, 1);
+        pivotJ5.position.set(0, 0, 0.5); 
+        wristLink.add(pivotJ5);
+        REFS['j5'] = pivotJ5;
+        createServo(pivotJ5, {x:0, y:0, z:0}, {x:0, y:0, z:0});
+
+        const gripperGroup = new THREE.Group();
+        gripperGroup.position.z = 0.3;
+        pivotJ5.add(gripperGroup);
+        REFS['grp_gripper'] = gripperGroup;
+        createBox(1.2, 0.2, 0.2, matDark, gripperGroup, {x:0, y:0, z:0}, 'mesh_gripper');
+
+        const fingerL = new THREE.Group();
+        fingerL.position.x = -0.5;
+        gripperGroup.add(fingerL);
+        createBox(0.1, 0.1, 0.8, matOrange, fingerL, {x:0, y:0, z:0.4});
+        
+        const fingerR = new THREE.Group();
+        fingerR.position.x = 0.5;
+        gripperGroup.add(fingerR);
+        createBox(0.1, 0.1, 0.8, matOrange, fingerR, {x:0, y:0, z:0.4});
+
+        // --- UI生成 ---
+        const configList = document.getElementById('config-list');
+        PART_CONFIG.forEach(p => {
+            const html = `
+            <div class="config-row">
+                <span class="config-label">${p.name}</span>
+                <div class="config-input-group">
+                    L:<input type="number" id="cfg-len-${p.id}" value="${p.len}" step="0.01" onchange="updatePhysicsParams()">
+                    <span class="unit">m</span>
+                </div>
+                <div class="config-input-group">
+                    M:<input type="number" id="cfg-mass-${p.id}" value="${p.mass}" step="0.001" onchange="updatePhysicsParams()">
+                    <span class="unit">kg</span>
+                </div>
+            </div>`;
+            configList.insertAdjacentHTML('beforeend', html);
+        });
+
+        // --- 物理更新ロジック ---
+        function updatePhysicsParams() {
+            PART_CONFIG.forEach(p => {
+                const lenEl = document.getElementById(`cfg-len-${p.id}`);
+                const massEl = document.getElementById(`cfg-mass-${p.id}`);
+                p.len = parseFloat(lenEl.value);
+                p.mass = parseFloat(massEl.value);
+            });
+            servoMass = parseFloat(document.getElementById('cfg-servo-mass').value);
+
+            const metersToUnit = 1 / BASE_SCALE_FACTOR;
+
+            const arm1UnitLen = PART_CONFIG.find(p=>p.id==='arm1').len * metersToUnit;
+            const arm1Mesh = REFS['mesh_arm1'];
+            arm1Mesh.scale.z = arm1UnitLen;
+            arm1Mesh.position.z = arm1UnitLen / 2;
+            REFS['j3'].position.z = arm1UnitLen;
+
+            const arm2UnitLen = PART_CONFIG.find(p=>p.id==='arm2').len * metersToUnit;
+            const arm2Mesh = REFS['mesh_arm2'];
+            arm2Mesh.scale.z = arm2UnitLen;
+            arm2Mesh.position.z = arm2UnitLen / 2;
+            REFS['j4'].position.z = arm2UnitLen;
+
+            const wristLen = PART_CONFIG.find(p=>p.id==='wrist').len * metersToUnit;
+            REFS['j5'].position.z = wristLen + 0.2;
+
+            REFS['mesh_root'].userData.mass = PART_CONFIG.find(p=>p.id==='root').mass;
+            REFS['mesh_arm1'].userData.mass = PART_CONFIG.find(p=>p.id==='arm1').mass;
+            REFS['mesh_arm2'].userData.mass = PART_CONFIG.find(p=>p.id==='arm2').mass;
+            REFS['mesh_wrist'].userData.mass = PART_CONFIG.find(p=>p.id==='wrist').mass;
+            REFS['mesh_gripper'].userData.mass = PART_CONFIG.find(p=>p.id==='gripper').mass;
+
+            scene.traverse(obj => {
+                if(obj.userData.isServo) {
+                    obj.userData.mass = servoMass;
+                }
+            });
+
+            updateRobot();
+        }
+
+        // --- トルク計算ロジック ---
+        function getDescendantBodies(pivot) {
+            const bodies = [];
+            pivot.traverse(child => {
+                if (child.userData.mass !== undefined) bodies.push(child);
+            });
+            return bodies;
+        }
+
+        function calculateTorque(pivot) {
+            const jointWorldPos = new THREE.Vector3();
+            pivot.getWorldPosition(jointWorldPos);
+
+            const axisLocal = pivot.userData.axis.clone();
+            const axisWorld = axisLocal.transformDirection(pivot.matrixWorld).normalize();
+
+            let totalTorque = 0;
+            const bodies = getDescendantBodies(pivot);
+
+            bodies.forEach(body => {
+                const mass = body.userData.mass;
+                const bodyWorldPos = new THREE.Vector3();
+                body.getWorldPosition(bodyWorldPos);
+
+                const r_unit = new THREE.Vector3().subVectors(bodyWorldPos, jointWorldPos);
+                const r_meter = r_unit.multiplyScalar(BASE_SCALE_FACTOR);
+
+                const F = new THREE.Vector3(0, -mass * GRAVITY, 0);
+                const T = new THREE.Vector3().crossVectors(r_meter, F);
+                
+                totalTorque += T.dot(axisWorld);
+            });
+
+            return Math.abs(totalTorque) * 10.19716; 
+        }
+
+        // アシスト制御
+        const assistSlider = document.getElementById('assist-val');
+        const assistDisp = document.getElementById('assist-disp');
+        assistSlider.addEventListener('input', (e) => {
+            assistTorque = parseFloat(e.target.value);
+            assistDisp.innerText = assistTorque.toFixed(1);
+            updateRobot();
+        });
+
+        const sliders = {
+            j1: document.getElementById('j1'), j2: document.getElementById('j2'),
+            j3: document.getElementById('j3'), j4: document.getElementById('j4'),
+            j5: document.getElementById('j5'), j6: document.getElementById('j6')
+        };
+        const torqueListEl = document.getElementById('torque-list');
+        const jointsForTorque = [
+            {id:1, name:"J1(Base)", ref:REFS['j1'], type:'yaw'},
+            {id:2, name:"J2(Root)", ref:REFS['j2'], type:'pitch'},
+            {id:3, name:"J3(Elbow)", ref:REFS['j3'], type:'pitch'},
+            {id:4, name:"J4(Wrist)", ref:REFS['j4'], type:'pitch'},
+            {id:5, name:"J5(Roll)",  ref:REFS['j5'], type:'roll'}
+        ];
+
+        function updateRobot() {
+            const vals = {};
+            Object.keys(sliders).forEach(k => {
+                vals[k] = parseFloat(sliders[k].value);
+                document.getElementById('val'+k.replace('j','')).innerText = (k==='j6')?vals[k]+'%':vals[k]+'°';
+            });
+
+            const d2r = Math.PI/180;
+            REFS['j1'].rotation.y = -vals.j1 * d2r;
+            REFS['j2'].rotation.x = vals.j2 * d2r;
+            REFS['j3'].rotation.x = vals.j3 * d2r;
+            REFS['j4'].rotation.x = vals.j4 * d2r;
+            REFS['j5'].rotation.z = vals.j5 * d2r;
+            
+            REFS['grp_gripper'].children.forEach(c => {
+                if(c.position.x < 0) c.rotation.y = (vals.j6/100)*45*d2r;
+                else if(c.position.x > 0) c.rotation.y = -(vals.j6/100)*45*d2r;
+            });
+
+            scene.updateMatrixWorld(true);
+
+            let html = '';
+            jointsForTorque.forEach(j => {
+                let t = calculateTorque(j.ref);
+                
+                // アシスト機能: Pitch軸（重力に逆らう関節）のみ軽減
+                if (j.type === 'pitch' && assistTorque > 0) {
+                    t = Math.max(0, t - assistTorque);
+                }
+
+                const limit = TORQUE_LIMIT_SINGLE;
+                const p = Math.min((t/limit)*100, 100);
+                
+                let col = "#00ff00";
+                if(t > limit) col = "#ff0044";
+                else if(t > limit*0.8) col = "#ffff00";
+                
+                html += `
+                <div class="torque-item">
+                    <span style="width:50px;">${j.name}</span>
+                    <div class="torque-bar-bg"><div class="torque-bar" style="width:${p}%; background:${col};"></div></div>
+                    <span class="torque-val" style="color:${col}">${t.toFixed(2)}</span>
+                </div>`;
+            });
+            torqueListEl.innerHTML = html;
+        }
+
+        Object.values(sliders).forEach(s => s.addEventListener('input', updateRobot));
+        
+        window.resetPose = function() {
+            Object.values(sliders).forEach(s => s.value = s.defaultValue);
+            updateRobot();
+        };
+
+        updatePhysicsParams();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+    </script>
+</body>
+</html>
