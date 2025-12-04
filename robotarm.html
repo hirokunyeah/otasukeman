@@ -672,22 +672,26 @@
             const ikHoverPlace = solveIK(placeX, placeY + 0.15, placeZ);
             const ikPlace = solveIK(placeX, placeY, placeZ);
 
-            if(ikHoverPlace && ikPlace) {
-                setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
-                await wait(1500);
-                
+            if(!ikPlace) {
+                console.log("Place target out of reach!");
+                setTargetAngle({ j6: 0 }); 
+                await wait(500);
+            } else {
+                if(ikHoverPlace) {
+                    setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
+                    await wait(1500);
+                }
+
                 setTargetAngle(ikPlace);
                 await wait(1000);
                 
                 setTargetAngle({ j6: 0 }); // Release
                 await wait(800);
-                
-                setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
-                await wait(1000);
-            } else {
-                console.log("Place target out of reach!");
-                setTargetAngle({ j6: 0 }); 
-                await wait(500);
+
+                if(ikHoverPlace) {
+                    setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
+                    await wait(1000);
+                }
             }
             
             // ゴースト消去
