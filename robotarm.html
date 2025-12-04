@@ -287,6 +287,7 @@
             const rect = renderer.domElement.getBoundingClientRect();
             pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
             pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            updateDropPlaneHeight();
             raycaster.setFromCamera(pointer, camera);
             const intersection = new THREE.Vector3();
             if (raycaster.ray.intersectPlane(dropPlane, intersection)) {
@@ -300,8 +301,9 @@
                     intersection.x = scaledX / BASE_SCALE_FACTOR;
                     intersection.z = scaledZ / BASE_SCALE_FACTOR;
                 }
+                const halfHWorld = getTargetHalfHeightWorld();
                 dropPoint.copy(intersection);
-                dropPoint.y = tableH + targetH / 2;
+                dropPoint.y = tableH + halfHWorld;
                 dropMarker.position.copy(dropPoint);
                 dropMarker.visible = true;
                 customDropTargetSet = true;
@@ -501,12 +503,14 @@
         const targetH = 0.3;
         let targetObj = createBox(targetH, targetH, targetH, matRed, scene, {x:1.5, y:tableH+targetH/2, z:1.5}, 'target');
 
-        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(tableH + targetH / 2));
+        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
         const dropPoint = new THREE.Vector3();
         const dropTargetRobot = new THREE.Vector3();
         const robotDropTarget = new THREE.Vector3();
+        const tempTargetBox = new THREE.Box3();
+        const HOVER_OFFSET = 0.25;
         const worldToRobot = (world, target) => {
             // Pick時と同じく、ワールド座標をそのままスケール変換する
             target.set(world.x * BASE_SCALE_FACTOR, world.y * BASE_SCALE_FACTOR, world.z * BASE_SCALE_FACTOR);
@@ -514,6 +518,16 @@
         const robotToWorld = (robot, target) => {
             target.set(robot.x / BASE_SCALE_FACTOR, robot.y / BASE_SCALE_FACTOR, robot.z / BASE_SCALE_FACTOR);
         };
+        function getTargetHalfHeightWorld() {
+            if(!targetObj) return targetH / 2;
+            scene.updateMatrixWorld(true);
+            tempTargetBox.setFromObject(targetObj);
+            return (tempTargetBox.max.y - tempTargetBox.min.y) / 2;
+        }
+        function updateDropPlaneHeight() {
+            dropPlane.constant = -(tableH + getTargetHalfHeightWorld());
+        }
+        updateDropPlaneHeight();
         let customDropTargetSet = false;
         const dropMarker = new THREE.Mesh(
             new THREE.SphereGeometry(0.05, 16, 16),
@@ -616,7 +630,8 @@
             const ty = tPos.y * BASE_SCALE_FACTOR; 
             const tz = tPos.z * BASE_SCALE_FACTOR;
             
-            const boxHalfH = (0.3 / 2) * BASE_SCALE_FACTOR;
+            const targetHalfHeightWorld = getTargetHalfHeightWorld();
+            const boxHalfH = targetHalfHeightWorld * BASE_SCALE_FACTOR;
             const gripY = ty + boxHalfH - 0.01; 
 
             if(debugLinePick) scene.remove(debugLinePick);
@@ -625,9 +640,9 @@
             const ikPick = solveIK(tx, gripY, tz); 
             if(!ikPick) { alert("届きません！(Pick)"); return; }
 
-            const ikHoverPick = solveIK(tx, gripY + 0.15, tz);
+            const ikHoverPick = solveIK(tx, gripY + HOVER_OFFSET, tz);
             
-            const pickStart = new THREE.Vector3(tx, gripY + 0.15 + boxHalfH, tz).divideScalar(BASE_SCALE_FACTOR);
+            const pickStart = new THREE.Vector3(tx, gripY + HOVER_OFFSET + boxHalfH, tz).divideScalar(BASE_SCALE_FACTOR);
             const pickEnd = new THREE.Vector3(tx, gripY + boxHalfH, tz).divideScalar(BASE_SCALE_FACTOR);
             debugLinePick = drawLine(pickStart, pickEnd, debugLineMatRed, scene);
 
@@ -665,11 +680,11 @@
             // Draw Place Line (Green)
             const placeStartWorld = new THREE.Vector3();
             const placeEndWorld = new THREE.Vector3();
-            robotToWorld(new THREE.Vector3(placeX, placeY + 0.15 + boxHalfH, placeZ), placeStartWorld);
+            robotToWorld(new THREE.Vector3(placeX, placeY + HOVER_OFFSET + boxHalfH, placeZ), placeStartWorld);
             robotToWorld(new THREE.Vector3(placeX, placeY + boxHalfH, placeZ), placeEndWorld);
             debugLinePlace = drawLine(placeStartWorld, placeEndWorld, debugLineMatGreen, scene);
 
-            const ikHoverPlace = solveIK(placeX, placeY + 0.15, placeZ);
+            const ikHoverPlace = solveIK(placeX, placeY + HOVER_OFFSET, placeZ);
             const ikPlace = solveIK(placeX, placeY, placeZ);
 
             if(!ikPlace) {
@@ -696,7 +711,7 @@
             
             // ゴースト消去
             ghostObj.position.y = -10;
-            setTargetAngle({ j2: -30, j3: 90, j4: 30 }); 
+            setTargetAngle({ j1: 0, j2: -122, j3: 127, j4: 30 }); 
         }
         window.startAutoPickAndPlace = startAutoPickAndPlace;
 
@@ -808,11 +823,13 @@
             const tx = r * Math.sin(theta);
             const tz = r * Math.cos(theta); 
 
-            targetObj.position.set(tx, tableH + targetH/2, tz);
             targetObj.rotation.set(0,0,0);
+            const halfHWorld = getTargetHalfHeightWorld();
+            targetObj.position.set(tx, tableH + halfHWorld, tz);
             updateTargetParams();
             customDropTargetSet = false;
             dropMarker.visible = false;
+            updateDropPlaneHeight();
         }
         window.resetTarget = resetTarget;
 
@@ -847,15 +864,17 @@
         function releaseTarget() {
             isGrabbed = false;
             scene.attach(targetObj);
+            targetObj.rotation.set(0,0,0);
             const pos = targetObj.position;
             const onTable = (pos.x > -2.0 && pos.x < 2.0 && pos.z > 0.5 && pos.z < 2.5);
-            const floorH = onTable ? (tableH + targetH/2) : (targetH/2);
+            const halfHWorld = getTargetHalfHeightWorld();
+            const floorH = onTable ? (tableH + halfHWorld) : halfHWorld;
             targetObj.position.y = floorH;
-            targetObj.rotation.set(0,0,0);
             targetObj.userData.mass = undefined;
             const st = document.getElementById('grab-status');
             st.innerText = "RELEASED";
             st.className = "grab-status released";
+            updateDropPlaneHeight();
         }
 
         const sliders = {
