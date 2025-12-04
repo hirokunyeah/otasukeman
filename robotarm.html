@@ -130,9 +130,9 @@
 
                 <div id="tab-pose" class="tab-content active">
                     <div class="control-group"><label>1. Base (Yaw) <span id="val1">0°</span></label><input type="range" id="j1" min="-180" max="180" value="0"></div>
-                    <div class="control-group"><label>2. Root (Pitch) <span id="val2">0°</span></label><input type="range" id="j2" min="-180" max="180" value="0"></div>
-                    <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">0°</span></label><input type="range" id="j3" min="-180" max="180" value="0"></div>
-                    <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">0°</span></label><input type="range" id="j4" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>2. Root (Pitch) <span id="val2">-122°</span></label><input type="range" id="j2" min="-180" max="180" value="-122"></div>
+                    <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">127°</span></label><input type="range" id="j3" min="-180" max="180" value="127"></div>
+                    <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">30°</span></label><input type="range" id="j4" min="-180" max="180" value="30"></div>
                     <div class="control-group"><label>5. Roll <span id="val5">0°</span></label><input type="range" id="j5" min="-180" max="180" value="0"></div>
                     
                     <div class="control-group"><label>6. Gripper <span id="val6">0%</span></label><input type="range" id="j6" min="0" max="100" value="0"></div>
@@ -246,8 +246,9 @@
         const GRAVITY = 9.80665;
         const BASE_SCALE_FACTOR = 0.12 / 2.5; 
 
-        const targetAngles = { j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 };
-        const currentAngles = { j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 };
+        const DEFAULT_POSE = { j1:0, j2:-122, j3:127, j4:30, j5:0, j6:0 };
+        const targetAngles = { ...DEFAULT_POSE };
+        const currentAngles = { ...DEFAULT_POSE };
         let isAnimating = false;
 
         const PART_CONFIG = [
@@ -353,6 +354,7 @@
         const debugLineMatGreen = new THREE.LineBasicMaterial({ color: 0x33ff33 });
         let debugLinePick = null;
         let debugLinePlace = null;
+        let lastReachStatus = '---';
 
         function drawLine(p1, p2, mat, scene) {
             const points = [];
@@ -366,6 +368,23 @@
 
         function formatVec(vec) {
             return `(${vec.x.toFixed(2)}, ${vec.y.toFixed(2)}, ${vec.z.toFixed(2)})`;
+        }
+
+        function describeReachContext(keys) {
+            if(!keys || keys.length === 0) return '全関節';
+            if(keys.length === 1 && keys[0] === 'j6') return 'グリッパ';
+            return 'アーム';
+        }
+
+        function recordReachStatus(context, reached) {
+            if(!REFS['grp_gripper']) {
+                lastReachStatus = `${context}: ${reached ? '到達' : '未達'}`;
+                return;
+            }
+            const gripWorld = new THREE.Vector3();
+            REFS['grp_gripper'].getWorldPosition(gripWorld);
+            const state = reached ? '到達' : '未達(Timeout)';
+            lastReachStatus = `${context}: ${state} @ ${formatVec(gripWorld)}`;
         }
 
         function updatePositionHUD() {
@@ -385,9 +404,12 @@
                 placeLabel = formatVec(placeWorld);
             }
 
+            const gripVal = currentAngles ? Math.round(currentAngles.j6 || 0) : 0;
             positionInfoEl.innerHTML = `オブジェクト: ${formatVec(objPos)}<br>` +
                 `ドロップポイント: ${dropLabel}<br>` +
-                `アーム配置先: ${placeLabel}`;
+                `アーム配置先: ${placeLabel}<br>` +
+                `グリッパ開度: ${gripVal}%<br>` +
+                `到達判定: ${lastReachStatus}`;
         }
 
         function createBox(w, h, d, mat, parent, pos, name) {
@@ -511,6 +533,7 @@
         const robotDropTarget = new THREE.Vector3();
         const tempTargetBox = new THREE.Box3();
         const HOVER_OFFSET = 0.25;
+        const ARM_JOINTS = ['j1','j2','j3','j4'];
         const worldToRobot = (world, target) => {
             // Pick時と同じく、ワールド座標をそのままスケール変換する
             target.set(world.x * BASE_SCALE_FACTOR, world.y * BASE_SCALE_FACTOR, world.z * BASE_SCALE_FACTOR);
@@ -613,15 +636,14 @@
                 j2: j2_rad * 180 / Math.PI,
                 j3: j3_rad * 180 / Math.PI,
                 j4: j4_rad * 180 / Math.PI,
-                j5: 0, 
-                j6: 0
+                j5: 0
             };
         }
 
         async function startAutoPickAndPlace() {
             if(isGrabbed) {
                 setTargetAngle({ j6: 0 }); 
-                await wait(500);
+                await waitForReach(['j6']);
                 return;
             }
 
@@ -648,15 +670,15 @@
 
             if(ikHoverPick) {
                 setTargetAngle({ j1: ikHoverPick.j1, j2: ikHoverPick.j2, j3: ikHoverPick.j3, j4: ikHoverPick.j4, j5:0, j6: 0 });
-                await wait(1200);
+                await waitForReach(ARM_JOINTS);
             }
             setTargetAngle(ikPick);
-            await wait(1000);
+            await waitForReach(ARM_JOINTS);
             setTargetAngle({ j6: 100 });
-            await wait(800);
+            await waitForReach(['j6']);
             if(ikHoverPick) {
                 setTargetAngle({ j1: ikHoverPick.j1, j2: ikHoverPick.j2, j3: ikHoverPick.j3, j4: ikHoverPick.j4 });
-                await wait(1000);
+                await waitForReach(ARM_JOINTS);
             }
 
             // --- 2. PLACE Path (Right side of Robot: X+) ---
@@ -690,41 +712,31 @@
             if(!ikPlace) {
                 console.log("Place target out of reach!");
                 setTargetAngle({ j6: 0 }); 
-                await wait(500);
+                await waitForReach(['j6']);
             } else {
                 if(ikHoverPlace) {
                     setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
-                    await wait(1500);
+                    await waitForReach(ARM_JOINTS);
                 }
 
                 setTargetAngle(ikPlace);
-                await wait(1000);
+                await waitForReach(ARM_JOINTS);
                 
                 setTargetAngle({ j6: 0 }); // Release
-                await wait(800);
+                await waitForReach(['j6']);
 
                 if(ikHoverPlace) {
                     setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
-                    await wait(1000);
+                    await waitForReach(ARM_JOINTS);
                 }
             }
             
             // ゴースト消去
             ghostObj.position.y = -10;
             setTargetAngle({ j1: 0, j2: -122, j3: 127, j4: 30 }); 
+            await waitForReach(ARM_JOINTS);
         }
         window.startAutoPickAndPlace = startAutoPickAndPlace;
-
-        function setTargetAngle(newAngles) {
-            for(let key in newAngles) {
-                targetAngles[key] = newAngles[key];
-            }
-            isAnimating = true;
-        }
-
-        function wait(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
 
         function updatePhysicsParams() {
             PART_CONFIG.forEach(p => {
@@ -971,12 +983,42 @@
         }));
         
         window.resetPose = function() {
-            setTargetAngle({ j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 });
+            setTargetAngle({ ...DEFAULT_POSE });
         };
 
         function setTargetAngle(newAngles) {
             for(let k in newAngles) targetAngles[k] = newAngles[k];
             isAnimating = true;
+        }
+
+        function waitForReach(jointKeys, tolerance = 2, timeout = 60000) {
+            const keys = (jointKeys && jointKeys.length) ? jointKeys : Object.keys(targetAngles);
+            const contextLabel = describeReachContext(keys);
+            return new Promise(resolve => {
+                const start = performance.now ? performance.now() : Date.now();
+                const timer = setInterval(() => {
+                    const now = performance.now ? performance.now() : Date.now();
+                    if (now - start > timeout) {
+                        clearInterval(timer);
+                        recordReachStatus(contextLabel, false);
+                        resolve(false);
+                        return;
+                    }
+                    let reached = true;
+                    for (const key of keys) {
+                        if (targetAngles[key] === undefined || currentAngles[key] === undefined) continue;
+                        if (Math.abs(targetAngles[key] - currentAngles[key]) > tolerance) {
+                            reached = false;
+                            break;
+                        }
+                    }
+                    if (reached) {
+                        clearInterval(timer);
+                        recordReachStatus(contextLabel, true);
+                        resolve(true);
+                    }
+                }, 50);
+            });
         }
 
         resetTarget(); 
