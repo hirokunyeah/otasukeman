@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>6軸ロボットアーム シミュレーター v2.2 (アシスト機能付き)</title>
+    <title>6軸ロボットアーム シミュレーター v3.21 (Right Side Place)</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
         canvas { display: block; }
@@ -12,28 +12,42 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            width: 340px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
+            width: 360px;
             max-height: 95vh;
             pointer-events: none;
         }
 
         .panel {
             background: rgba(0, 0, 0, 0.85);
-            padding: 15px;
             border-radius: 8px;
             color: #fff;
             border: 1px solid #444;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            transition: opacity 0.3s;
             pointer-events: auto;
-            overflow-y: auto;
         }
-
-        h2 { margin-top: 0; font-size: 16px; color: #00aaff; border-bottom: 1px solid #444; padding-bottom: 5px; margin-bottom: 10px;}
-        h3 { font-size: 14px; color: #ffcc00; margin: 10px 0 5px 0; border-top: 1px solid #444; padding-top: 5px; }
         
+        .panel-header {
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid #444;
+            border-radius: 8px 8px 0 0;
+            cursor: move;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-header h2 { margin: 0; font-size: 14px; color: #00aaff; pointer-events: none; }
+        .toggle-btn { background: none; border: none; color: #aaa; cursor: pointer; font-size: 16px; padding: 0 5px; }
+        
+        .panel-content { padding: 15px; overflow-y: auto; max-height: 80vh; display: block; }
+        .panel.collapsed .panel-content { display: none; }
+        .panel.collapsed { width: 200px; }
+
+        h3 { font-size: 13px; color: #ffcc00; margin: 10px 0 5px 0; border-top: 1px solid #444; padding-top: 5px; }
         .control-group { margin-bottom: 8px; }
         label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; }
         input[type=range] { width: 100%; cursor: pointer; margin:0; }
@@ -41,10 +55,7 @@
         .config-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; font-size: 12px; }
         .config-label { width: 80px; }
         .config-input-group { display: flex; gap: 5px; align-items: center; }
-        input[type=number] { 
-            width: 50px; background: #333; border: 1px solid #555; color: #fff; 
-            padding: 2px; border-radius: 3px; text-align: right;
-        }
+        input[type=number] { width: 50px; background: #333; border: 1px solid #555; color: #fff; padding: 2px; border-radius: 3px; text-align: right; }
         .unit { color: #888; width: 15px; }
 
         .torque-item { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; align-items: center; }
@@ -55,19 +66,34 @@
         .status-warn { color: #ffff00; }
         .status-danger { color: #ff0044; font-weight: bold; }
 
-        button { width:100%; padding:6px; background:#444; color:white; border:none; cursor:pointer; border-radius:3px; margin-top:5px; }
+        button { width:100%; padding:8px; background:#444; color:white; border:none; cursor:pointer; border-radius:3px; margin-top:5px; font-weight:bold;}
         button:hover { background: #555; }
+        .btn-primary { background: #0055aa; }
+        .btn-primary:hover { background: #0066cc; }
 
         #info { position: absolute; bottom: 10px; left: 10px; color: #888; font-size: 12px; pointer-events: none; }
+
+        /* 軸の凡例 */
+        #axis-legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            pointer-events: none; 
+        }
         
         .tab-buttons { display: flex; gap: 5px; margin-bottom: 10px; }
-        .tab-btn { flex: 1; background: #222; border: 1px solid #444; color: #888; padding: 5px; cursor: pointer; border-radius: 4px; font-size: 12px;}
+        .tab-btn { flex: 1; background: #222; border: 1px solid #444; color: #888; padding: 5px; cursor: pointer; border-radius: 4px; font-size: 12px; text-align:center;}
         .tab-btn.active { background: #0055ff; color: white; border-color: #0055ff; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
         
-        /* アシスト設定エリア */
         .assist-control { background: #2a2a2a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #444; }
+        .target-control { background: #3a1a1a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border: 1px solid #644; }
+        .grab-status { font-weight: bold; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left:5px;}
+        .grabbed { background: #00ff00; color: #000; }
+        .released { background: #555; color: #aaa; }
 
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -76,59 +102,113 @@
 <body>
 
     <div id="ui-container">
-        <div class="panel">
-            <div class="tab-buttons">
-                <div class="tab-btn active" onclick="switchTab('pose')">Pose Control</div>
-                <div class="tab-btn" onclick="switchTab('config')">Physics Config</div>
+        <div class="panel" id="main-panel">
+            <div class="panel-header" id="drag-handle">
+                <h2>Robot Control Panel</h2>
+                <button class="toggle-btn" onclick="togglePanel()">_</button>
             </div>
-
-            <!-- タブ1: ポーズ制御 -->
-            <div id="tab-pose" class="tab-content active">
-                <h2>Joint Control</h2>
-                <div class="control-group"><label>1. Base (Yaw) <span id="val1">0°</span></label><input type="range" id="j1" min="-180" max="180" value="0"></div>
-                <div class="control-group"><label>2. Root (Pitch) <span id="val2">0°</span></label><input type="range" id="j2" min="-180" max="180" value="0"></div>
-                <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">0°</span></label><input type="range" id="j3" min="-180" max="180" value="0"></div>
-                <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">0°</span></label><input type="range" id="j4" min="-180" max="180" value="0"></div>
-                <div class="control-group"><label>5. Roll <span id="val5">0°</span></label><input type="range" id="j5" min="-180" max="180" value="0"></div>
-                <div class="control-group"><label>6. Gripper <span id="val6">50%</span></label><input type="range" id="j6" min="0" max="100" value="50"></div>
-                <button onclick="resetPose()">Reset Pose</button>
-
-                <h3>Torque Monitor</h3>
-                
-                <!-- アシスト設定 -->
-                <div class="assist-control">
-                    <label style="color:#ffcc00;">Spring/Counterweight Assist</label>
-                    <div style="display:flex; align-items:center; gap:5px; font-size:11px; margin-bottom:3px;">
-                        <span>Help:</span>
-                        <input type="range" id="assist-val" min="0" max="2.0" step="0.1" value="0" style="flex:1;">
-                        <span id="assist-disp" style="width:50px; text-align:right;">0.0</span> kg·cm
-                    </div>
-                    <div style="font-size:10px; color:#888;">Reduces load on Pitch joints (2,3,4)</div>
+            
+            <div class="panel-content">
+                <div class="tab-buttons">
+                    <div class="tab-btn active" onclick="switchTab('pose')">Control</div>
+                    <div class="tab-btn" onclick="switchTab('config')">Physics</div>
                 </div>
 
-                <div id="torque-list"></div>
-            </div>
+                <div id="tab-pose" class="tab-content active">
+                    <div class="control-group"><label>1. Base (Yaw) <span id="val1">0°</span></label><input type="range" id="j1" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>2. Root (Pitch) <span id="val2">0°</span></label><input type="range" id="j2" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">0°</span></label><input type="range" id="j3" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">0°</span></label><input type="range" id="j4" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>5. Roll <span id="val5">0°</span></label><input type="range" id="j5" min="-180" max="180" value="0"></div>
+                    
+                    <div class="control-group"><label>6. Gripper <span id="val6">0%</span></label><input type="range" id="j6" min="0" max="100" value="0"></div>
+                    
+                    <div class="target-control">
+                        <label style="color:#ff5555; margin-bottom:5px;">Target <span id="grab-status" class="grab-status released">RELEASED</span></label>
+                        <div style="display:flex; gap:5px; margin-bottom:5px;">
+                            <button onclick="resetTarget()" style="font-size:11px; background:#533; flex:1;">Respawn</button>
+                            <button onclick="startAutoPickAndPlace()" class="btn-primary" style="font-size:11px; flex:1;">Auto P&P (Right Side)</button>
+                        </div>
+                        <div class="config-input-group" style="justify-content: space-between;">
+                            <span>Mass:</span>
+                            <div>
+                                <input type="number" id="target-mass" value="0.050" step="0.001" onchange="updateTargetParams()">
+                                <span class="unit">kg</span>
+                            </div>
+                        </div>
+                    </div>
 
-            <!-- タブ2: 物理設定 -->
-            <div id="tab-config" class="tab-content">
-                <h2>Physics Configuration</h2>
-                <div style="font-size:11px; color:#aaa; margin-bottom:10px;">Change Length(m) & Mass(kg)</div>
-                <div id="config-list"></div>
-                <h3 style="margin-top:15px;">Other Settings</h3>
-                <div class="config-row">
-                    <span class="config-label">Servo Mass</span>
-                    <div class="config-input-group">
-                        <input type="number" id="cfg-servo-mass" value="0.009" step="0.001" onchange="updatePhysicsParams()">
-                        <span class="unit">kg</span>
+                    <div style="display:flex; gap:5px;">
+                        <button onclick="resetPose()" style="flex:1;">Reset Pose</button>
+                    </div>
+
+                    <h3>Torque (Limit: 1.3 kg·cm)</h3>
+                    <div class="assist-control">
+                        <label style="color:#ffcc00;">Spring Assist</label>
+                        <div style="display:flex; align-items:center; gap:5px; font-size:11px;">
+                            <input type="range" id="assist-val" min="0" max="2.0" step="0.1" value="0" style="flex:1;">
+                            <span id="assist-disp" style="width:40px; text-align:right;">0.0</span>
+                        </div>
+                    </div>
+                    <div id="torque-list"></div>
+                </div>
+
+                <div id="tab-config" class="tab-content">
+                    <div style="font-size:11px; color:#aaa; margin-bottom:10px;">Length(m) & Mass(kg)</div>
+                    <div id="config-list"></div>
+                    <h3 style="margin-top:15px;">Settings</h3>
+                    <div class="config-row">
+                        <span class="config-label">Servo Mass</span>
+                        <div class="config-input-group">
+                            <input type="number" id="cfg-servo-mass" value="0.009" step="0.001" onchange="updatePhysicsParams()">
+                            <span class="unit">kg</span>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="info">Mouse: Rotate / Zoom / Pan</div>
+    <div id="info">Mouse: Rotate / Zoom / Pan <br> 
+    <span style="color:#ff3333;">Red: Pick</span> / <span style="color:#33ff33;">Green: Place</span> / <span style="color:#00aaff;">Ghost: Target Loc</span></div>
+    
+    <div id="axis-legend"></div>
 
     <script>
+        const uiContainer = document.getElementById('ui-container');
+        const dragHandle = document.getElementById('drag-handle');
+        const mainPanel = document.getElementById('main-panel');
+        let isDragging = false;
+        let offset = { x: 0, y: 0 };
+
+        dragHandle.addEventListener('mousedown', (e) => {
+            if(e.target.tagName === 'BUTTON') return;
+            isDragging = true;
+            offset.x = e.clientX - uiContainer.getBoundingClientRect().left;
+            offset.y = e.clientY - uiContainer.getBoundingClientRect().top;
+            e.preventDefault();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                let newLeft = e.clientX - offset.x;
+                let newTop = e.clientY - offset.y;
+                newLeft = Math.max(0, Math.min(window.innerWidth - uiContainer.offsetWidth, newLeft));
+                newTop = Math.max(0, Math.min(window.innerHeight - uiContainer.offsetHeight, newTop));
+                uiContainer.style.left = newLeft + 'px';
+                uiContainer.style.top = newTop + 'px';
+                uiContainer.style.right = 'auto'; 
+            }
+        });
+
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        function togglePanel() {
+            mainPanel.classList.toggle('collapsed');
+            const btn = document.querySelector('.toggle-btn');
+            btn.innerText = mainPanel.classList.contains('collapsed') ? '+' : '_';
+        }
+
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
@@ -142,7 +222,10 @@
         const GRAVITY = 9.80665;
         const BASE_SCALE_FACTOR = 0.12 / 2.5; 
 
-        // 初期設定
+        const targetAngles = { j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 };
+        const currentAngles = { j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 };
+        let isAnimating = false;
+
         const PART_CONFIG = [
             { id: 'root',     name: 'Root',     len: 0.04, mass: 0.030, type: 'link' },
             { id: 'arm1',     name: 'Arm 1',    len: 0.12, mass: 0.040, type: 'arm' },
@@ -150,9 +233,12 @@
             { id: 'wrist',    name: 'Wrist',    len: 0.03, mass: 0.015, type: 'link' },
             { id: 'gripper',  name: 'Gripper',  len: 0.06, mass: 0.025, type: 'gripper' }
         ];
+        const MAX_REACH = PART_CONFIG.find(p => p.id === 'arm1').len + PART_CONFIG.find(p => p.id === 'arm2').len - 0.02;
         
         let servoMass = 0.009; 
-        let assistTorque = 0.0; // アシストトルク量
+        let assistTorque = 0.0;
+        let targetMass = 0.050; 
+        let isGrabbed = false;
 
         const REFS = {}; 
 
@@ -161,7 +247,7 @@
         
         const gridHelper = new THREE.GridHelper(20, 20, 0x444444, 0x333333);
         scene.add(gridHelper);
-        const axesHelper = new THREE.AxesHelper(1);
+        const axesHelper = new THREE.AxesHelper(5);
         scene.add(axesHelper);
 
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
@@ -173,6 +259,37 @@
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
+        const handleScenePointerDown = (event) => {
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(pointer, camera);
+            const intersection = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(dropPlane, intersection)) {
+                let scaledX = intersection.x * BASE_SCALE_FACTOR;
+                let scaledZ = intersection.z * BASE_SCALE_FACTOR;
+                const radial = Math.hypot(scaledX, scaledZ);
+                if (radial > MAX_REACH) {
+                    const clampFactor = (MAX_REACH * 0.98) / radial;
+                    scaledX *= clampFactor;
+                    scaledZ *= clampFactor;
+                    intersection.x = scaledX / BASE_SCALE_FACTOR;
+                    intersection.z = scaledZ / BASE_SCALE_FACTOR;
+                }
+                dropPoint.copy(intersection);
+                dropPoint.y = tableH + targetH / 2;
+                dropMarker.position.copy(dropPoint);
+                dropMarker.visible = true;
+                customDropTargetSet = true;
+                dropTargetRobot.set(
+                    dropPoint.x * BASE_SCALE_FACTOR,
+                    dropPoint.y * BASE_SCALE_FACTOR,
+                    dropPoint.z * BASE_SCALE_FACTOR
+                );
+            }
+        };
+        renderer.domElement.addEventListener('pointerdown', handleScenePointerDown);
+
         const ambientLight = new THREE.AmbientLight(0x666666);
         scene.add(ambientLight);
         const dirLight = new THREE.DirectionalLight(0xffffff, 1);
@@ -183,10 +300,47 @@
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
 
+        // --- 軸凡例 (Axis Legend) ---
+        const legendScene = new THREE.Scene();
+        const legendCamera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+        legendCamera.position.z = 5;
+        legendCamera.lookAt(0, 0, 0);
+        
+        const legendRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        legendRenderer.setSize(100, 100);
+        const legendContainer = document.getElementById('axis-legend');
+        legendContainer.appendChild(legendRenderer.domElement);
+
+        const arrowX = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 2, 0xff0000, 0.6, 0.4);
+        const arrowY = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 2, 0x00ff00, 0.6, 0.4);
+        const arrowZ = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), 2, 0x0055ff, 0.6, 0.4);
+        legendScene.add(arrowX);
+        legendScene.add(arrowY);
+        legendScene.add(arrowZ);
+
         const matGrey = new THREE.MeshPhongMaterial({ color: 0x888888 });
         const matOrange = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
         const matBlue = new THREE.MeshPhongMaterial({ color: 0x0055ff, transparent:true, opacity:0.8 });
         const matDark = new THREE.MeshPhongMaterial({ color: 0x333333 });
+        const matRed = new THREE.MeshPhongMaterial({ color: 0xff3333 }); 
+        const matTable = new THREE.MeshPhongMaterial({ color: 0x333344 }); 
+        const matGhost = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.3 });
+        const matDebug = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.5 });
+
+        const debugLineMatRed = new THREE.LineBasicMaterial({ color: 0xff3333 });
+        const debugLineMatGreen = new THREE.LineBasicMaterial({ color: 0x33ff33 });
+        let debugLinePick = null;
+        let debugLinePlace = null;
+
+        function drawLine(p1, p2, mat, scene) {
+            const points = [];
+            points.push(new THREE.Vector3(p1.x, p1.y, p1.z));
+            points.push(new THREE.Vector3(p2.x, p2.y, p2.z));
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(geometry, mat);
+            scene.add(line);
+            return line;
+        }
 
         function createBox(w, h, d, mat, parent, pos, name) {
             const geom = new THREE.BoxGeometry(w, h, d);
@@ -226,7 +380,6 @@
         scene.add(baseGroup);
         createCylinder(1.5, 1.5, 0.2, matDark, baseGroup, {x:0, y:0.1, z:0}, {x:0,y:0,z:0});
 
-        // J1: Yaw
         const pivotJ1 = new THREE.Group();
         pivotJ1.userData.axis = new THREE.Vector3(0, 1, 0);
         pivotJ1.position.y = 0.2;
@@ -235,7 +388,6 @@
         createCylinder(0.8, 0.8, 0.5, matGrey, pivotJ1, {x:0, y:0.25, z:0}, {x:0,y:0,z:0});
         createServo(pivotJ1, {x:0, y:0.2, z:0}, {x:0, y:0, z:0});
 
-        // J2: Root Pitch (Single Servo)
         const pivotJ2 = new THREE.Group();
         pivotJ2.userData.axis = new THREE.Vector3(1, 0, 0);
         pivotJ2.position.set(0, 0.6, 0);
@@ -249,7 +401,6 @@
         REFS['grp_arm1'] = arm1Group;
         createBox(0.2, 0.2, 1.0, matOrange, arm1Group, {x:0, y:0.1, z:0.5}, 'mesh_arm1'); 
 
-        // J3: Elbow
         const pivotJ3 = new THREE.Group();
         pivotJ3.userData.axis = new THREE.Vector3(1, 0, 0);
         pivotJ3.position.set(0, 0, 1.0);
@@ -262,7 +413,6 @@
         REFS['grp_arm2'] = arm2Group;
         createBox(0.2, 0.2, 1.0, matOrange, arm2Group, {x:0, y:0.1, z:0.5}, 'mesh_arm2');
 
-        // J4: Wrist Pitch
         const pivotJ4 = new THREE.Group();
         pivotJ4.userData.axis = new THREE.Vector3(1, 0, 0);
         pivotJ4.position.set(0, 0, 1.0);
@@ -274,7 +424,6 @@
         pivotJ4.add(wristLink);
         createBox(0.4, 0.4, 0.5, matGrey, wristLink, {x:0, y:0, z:0.25}, 'mesh_wrist');
 
-        // J5: Wrist Roll
         const pivotJ5 = new THREE.Group();
         pivotJ5.userData.axis = new THREE.Vector3(0, 0, 1);
         pivotJ5.position.set(0, 0, 0.5); 
@@ -298,6 +447,34 @@
         gripperGroup.add(fingerR);
         createBox(0.1, 0.1, 0.8, matOrange, fingerR, {x:0, y:0, z:0.4});
 
+        // --- 作業台 (Table) ---
+        const tableH = 0.4;
+        const workbench = createBox(4.0, tableH, 2.0, matTable, scene, {x:0, y:tableH/2, z:1.5}, 'workbench');
+
+        // --- ターゲット ---
+        const targetH = 0.3;
+        let targetObj = createBox(targetH, targetH, targetH, matRed, scene, {x:1.5, y:tableH+targetH/2, z:1.5}, 'target');
+
+        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -(tableH + targetH / 2));
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+        const dropPoint = new THREE.Vector3();
+        const dropTargetRobot = new THREE.Vector3();
+        let customDropTargetSet = false;
+        const dropMarker = new THREE.Mesh(
+            new THREE.SphereGeometry(0.05, 16, 16),
+            new THREE.MeshPhongMaterial({ color: 0x00ff00 })
+        );
+        dropMarker.visible = false;
+        scene.add(dropMarker);
+
+        // --- Ghost Object (Debug) ---
+        let ghostObj = createBox(targetH, targetH, targetH, matGhost, scene, {x:0, y:-10, z:0}, 'ghost');
+
+        // --- デバッグマーカー (IK Target) ---
+        let debugMarker = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), matDebug);
+        scene.add(debugMarker);
+
         // --- UI生成 ---
         const configList = document.getElementById('config-list');
         PART_CONFIG.forEach(p => {
@@ -316,7 +493,162 @@
             configList.insertAdjacentHTML('beforeend', html);
         });
 
-        // --- 物理更新ロジック ---
+        // --- IK Solvers (Axis Fixed) ---
+        function solveIK(tx, ty, tz) {
+            const l_arm1 = PART_CONFIG.find(p=>p.id==='arm1').len;
+            const l_arm2 = PART_CONFIG.find(p=>p.id==='arm2').len;
+            const l_wrist = PART_CONFIG.find(p=>p.id==='wrist').len;
+            const l_grip = PART_CONFIG.find(p=>p.id==='gripper').len;
+            const total_hand_len = l_wrist + l_grip;
+
+            const yaw_rad = Math.atan2(-tx, tz);
+            const yaw_deg = yaw_rad * 180 / Math.PI;
+
+            const r_target = Math.sqrt(tx*tx + tz*tz);
+            const r_wrist = r_target; 
+
+            const shoulder_pos_world = new THREE.Vector3();
+            REFS['j2'].getWorldPosition(shoulder_pos_world);
+            const h_shoulder = shoulder_pos_world.y * BASE_SCALE_FACTOR;
+
+            const target_wrist_y = ty + total_hand_len;
+            const dy = target_wrist_y - h_shoulder;
+            const dr = r_wrist; 
+
+            // デバッグ表示
+            const debugY = target_wrist_y / BASE_SCALE_FACTOR;
+            const debugR = r_wrist / BASE_SCALE_FACTOR;
+            debugMarker.position.set(Math.sin(yaw_rad)*debugR, debugY, Math.cos(yaw_rad)*debugR);
+
+            const D = Math.sqrt(dr*dr + dy*dy);
+
+            if (D > l_arm1 + l_arm2) {
+                return null;
+            }
+
+            const cos_alpha = (l_arm1*l_arm1 + l_arm2*l_arm2 - D*D) / (2 * l_arm1 * l_arm2);
+            const alpha = Math.acos(Math.max(-1, Math.min(1, cos_alpha)));
+            
+            const j3_rad = Math.PI - alpha;
+
+            const beta = Math.atan2(dy, dr);
+            const cos_gamma = (l_arm1*l_arm1 + D*D - l_arm2*l_arm2) / (2 * l_arm1 * D);
+            const gamma = Math.acos(Math.max(-1, Math.min(1, cos_gamma)));
+
+            const theta_abs = beta + gamma;
+            const j2_rad = -theta_abs; 
+
+            const j4_rad = theta_abs - j3_rad + (Math.PI / 2);
+
+            return {
+                j1: yaw_deg,
+                j2: j2_rad * 180 / Math.PI,
+                j3: j3_rad * 180 / Math.PI,
+                j4: j4_rad * 180 / Math.PI,
+                j5: 0, 
+                j6: 0
+            };
+        }
+
+        async function startAutoPickAndPlace() {
+            if(isGrabbed) {
+                setTargetAngle({ j6: 0 }); 
+                await wait(500);
+                return;
+            }
+
+            const tPos = targetObj.position.clone();
+            const tx = tPos.x * BASE_SCALE_FACTOR;
+            const ty = tPos.y * BASE_SCALE_FACTOR; 
+            const tz = tPos.z * BASE_SCALE_FACTOR;
+            
+            const boxHalfH = (0.3 / 2) * BASE_SCALE_FACTOR;
+            const gripY = ty + boxHalfH - 0.01; 
+
+            if(debugLinePick) scene.remove(debugLinePick);
+            if(debugLinePlace) scene.remove(debugLinePlace);
+
+            const ikPick = solveIK(tx, gripY, tz); 
+            if(!ikPick) { alert("届きません！(Pick)"); return; }
+
+            const ikHoverPick = solveIK(tx, gripY + 0.15, tz);
+            
+            const pickStart = new THREE.Vector3(tx, gripY + 0.15 + boxHalfH, tz).divideScalar(BASE_SCALE_FACTOR);
+            const pickEnd = new THREE.Vector3(tx, gripY + boxHalfH, tz).divideScalar(BASE_SCALE_FACTOR);
+            debugLinePick = drawLine(pickStart, pickEnd, debugLineMatRed, scene);
+
+            if(ikHoverPick) {
+                setTargetAngle({ j1: ikHoverPick.j1, j2: ikHoverPick.j2, j3: ikHoverPick.j3, j4: ikHoverPick.j4, j5:0, j6: 0 });
+                await wait(1200);
+            }
+            setTargetAngle(ikPick);
+            await wait(1000);
+            setTargetAngle({ j6: 100 });
+            await wait(800);
+            if(ikHoverPick) {
+                setTargetAngle({ j1: ikHoverPick.j1, j2: ikHoverPick.j2, j3: ikHoverPick.j3, j4: ikHoverPick.j4 });
+                await wait(1000);
+            }
+
+            // --- 2. PLACE Path (Right side of Robot: X+) ---
+            // ロボットの右側 (X軸プラス方向) に置くロジックに変更
+            // 距離はターゲットと同じ距離を保つ (半径R)
+            if (!customDropTargetSet) {
+                alert('配置先をクリックしてドロップマーカーを設定してください。');
+                return;
+            }
+            const placeX = dropTargetRobot.x;
+            const placeZ = dropTargetRobot.z;
+            const placeY = dropTargetRobot.y + boxHalfH - 0.01;
+
+            // Ghostを表示 (unitへ戻す)
+            const ghostPos = new THREE.Vector3(placeX, placeY + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
+            ghostObj.position.copy(ghostPos);
+            ghostObj.rotation.set(0,0,0);
+
+            // Draw Place Line (Green)
+            const placeStart = new THREE.Vector3(placeX, placeY + 0.15 + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
+            const placeEnd = new THREE.Vector3(placeX, placeY + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
+            debugLinePlace = drawLine(placeStart, placeEnd, debugLineMatGreen, scene);
+
+            const ikHoverPlace = solveIK(placeX, placeY + 0.15, placeZ);
+            const ikPlace = solveIK(placeX, placeY, placeZ);
+
+            if(ikHoverPlace && ikPlace) {
+                setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
+                await wait(1500);
+                
+                setTargetAngle(ikPlace);
+                await wait(1000);
+                
+                setTargetAngle({ j6: 0 }); // Release
+                await wait(800);
+                
+                setTargetAngle({ j1: ikHoverPlace.j1, j2: ikHoverPlace.j2, j3: ikHoverPlace.j3, j4: ikHoverPlace.j4 });
+                await wait(1000);
+            } else {
+                console.log("Place target out of reach!");
+                setTargetAngle({ j6: 0 }); 
+                await wait(500);
+            }
+            
+            // ゴースト消去
+            ghostObj.position.y = -10;
+            setTargetAngle({ j2: -30, j3: 90, j4: 30 }); 
+        }
+        window.startAutoPickAndPlace = startAutoPickAndPlace;
+
+        function setTargetAngle(newAngles) {
+            for(let key in newAngles) {
+                targetAngles[key] = newAngles[key];
+            }
+            isAnimating = true;
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
         function updatePhysicsParams() {
             PART_CONFIG.forEach(p => {
                 const lenEl = document.getElementById(`cfg-len-${p.id}`);
@@ -354,11 +686,9 @@
                     obj.userData.mass = servoMass;
                 }
             });
-
-            updateRobot();
         }
 
-        // --- トルク計算ロジック ---
+        // --- Calculate Local Torque (Fixed) ---
         function getDescendantBodies(pivot) {
             const bodies = [];
             pivot.traverse(child => {
@@ -368,11 +698,7 @@
         }
 
         function calculateTorque(pivot) {
-            const jointWorldPos = new THREE.Vector3();
-            pivot.getWorldPosition(jointWorldPos);
-
-            const axisLocal = pivot.userData.axis.clone();
-            const axisWorld = axisLocal.transformDirection(pivot.matrixWorld).normalize();
+            const axisLocal = pivot.userData.axis.clone().normalize();
 
             let totalTorque = 0;
             const bodies = getDescendantBodies(pivot);
@@ -381,27 +707,94 @@
                 const mass = body.userData.mass;
                 const bodyWorldPos = new THREE.Vector3();
                 body.getWorldPosition(bodyWorldPos);
+                const jointWorldPos = new THREE.Vector3();
+                pivot.getWorldPosition(jointWorldPos);
 
-                const r_unit = new THREE.Vector3().subVectors(bodyWorldPos, jointWorldPos);
-                const r_meter = r_unit.multiplyScalar(BASE_SCALE_FACTOR);
+                const r_world = new THREE.Vector3().subVectors(bodyWorldPos, jointWorldPos);
+                const F_world = new THREE.Vector3(0, -mass * GRAVITY, 0);
+                const T_world = new THREE.Vector3().crossVectors(r_world, F_world);
 
-                const F = new THREE.Vector3(0, -mass * GRAVITY, 0);
-                const T = new THREE.Vector3().crossVectors(r_meter, F);
+                const invRot = new THREE.Quaternion().copy(pivot.getWorldQuaternion(new THREE.Quaternion())).invert();
+                const T_local = T_world.clone().applyQuaternion(invRot);
+
+                const torqueComponent = T_local.dot(axisLocal);
+                const torqueNm = torqueComponent * BASE_SCALE_FACTOR;
                 
-                totalTorque += T.dot(axisWorld);
+                totalTorque += torqueNm;
             });
-
+            
             return Math.abs(totalTorque) * 10.19716; 
         }
 
-        // アシスト制御
         const assistSlider = document.getElementById('assist-val');
         const assistDisp = document.getElementById('assist-disp');
         assistSlider.addEventListener('input', (e) => {
             assistTorque = parseFloat(e.target.value);
             assistDisp.innerText = assistTorque.toFixed(1);
-            updateRobot();
         });
+
+        function resetTarget() {
+            if(isGrabbed) releaseTarget();
+            
+            // テーブル上ランダム (Z > 0: 正面側)
+            const minR = 1.0;
+            const maxR = 2.0;
+            const r = minR + Math.random() * (maxR - minR);
+            // 正面方向 -45~45度くらいに限定
+            const theta = (Math.random() - 0.5) * (Math.PI / 2); 
+            
+            const tx = r * Math.sin(theta);
+            const tz = r * Math.cos(theta); 
+
+            targetObj.position.set(tx, tableH + targetH/2, tz);
+            targetObj.rotation.set(0,0,0);
+            updateTargetParams();
+            customDropTargetSet = false;
+            dropMarker.visible = false;
+        }
+        window.resetTarget = resetTarget;
+
+        function updateTargetParams() {
+            targetMass = parseFloat(document.getElementById('target-mass').value);
+            targetObj.userData.mass = targetMass;
+        }
+        window.updateTargetParams = updateTargetParams;
+
+        function checkGrab(gripperVal) {
+            const gripPos = new THREE.Vector3();
+            REFS['grp_gripper'].getWorldPosition(gripPos);
+            const targetPos = new THREE.Vector3();
+            targetObj.getWorldPosition(targetPos);
+            const dist = gripPos.distanceTo(targetPos);
+            if (!isGrabbed && gripperVal > 80 && dist < 1.2) {
+                grabTarget();
+            } else if (isGrabbed && gripperVal < 50) {
+                releaseTarget();
+            }
+        }
+
+        function grabTarget() {
+            isGrabbed = true;
+            REFS['grp_gripper'].attach(targetObj);
+            targetObj.userData.mass = targetMass;
+            const st = document.getElementById('grab-status');
+            st.innerText = "GRABBED";
+            st.className = "grab-status grabbed";
+        }
+
+        function releaseTarget() {
+            isGrabbed = false;
+            scene.attach(targetObj);
+            const pos = targetObj.position;
+            const onTable = (pos.x > -2.0 && pos.x < 2.0 && pos.z > 0.5 && pos.z < 2.5);
+            const floorH = onTable ? (tableH + targetH/2) : (targetH/2);
+            targetObj.position.y = floorH;
+            targetObj.rotation.set(0,0,0);
+            targetObj.userData.mass = undefined;
+            const st = document.getElementById('grab-status');
+            st.innerText = "RELEASED";
+            st.className = "grab-status released";
+        }
 
         const sliders = {
             j1: document.getElementById('j1'), j2: document.getElementById('j2'),
@@ -417,43 +810,65 @@
             {id:5, name:"J5(Roll)",  ref:REFS['j5'], type:'roll'}
         ];
 
-        function updateRobot() {
-            const vals = {};
-            Object.keys(sliders).forEach(k => {
-                vals[k] = parseFloat(sliders[k].value);
-                document.getElementById('val'+k.replace('j','')).innerText = (k==='j6')?vals[k]+'%':vals[k]+'°';
-            });
+        function updateRobotState() {
+            const speed = 2.0; 
+            let moving = false;
+
+            if(isAnimating) {
+                for(let k in targetAngles) {
+                    const diff = targetAngles[k] - currentAngles[k];
+                    if(Math.abs(diff) > 0.1) {
+                        currentAngles[k] += Math.sign(diff) * Math.min(Math.abs(diff), speed);
+                        moving = true;
+                    } else {
+                        currentAngles[k] = targetAngles[k];
+                    }
+                    if(sliders[k]) sliders[k].value = currentAngles[k];
+                }
+                if(!moving) isAnimating = false; 
+            } else {
+                for(let k in sliders) {
+                    currentAngles[k] = parseFloat(sliders[k].value);
+                    targetAngles[k] = currentAngles[k]; 
+                }
+            }
+
+            for(let k in sliders) {
+                document.getElementById('val'+k.replace('j','')).innerText = (k==='j6')?Math.round(currentAngles[k])+'%':Math.round(currentAngles[k])+'°';
+            }
 
             const d2r = Math.PI/180;
-            REFS['j1'].rotation.y = -vals.j1 * d2r;
-            REFS['j2'].rotation.x = vals.j2 * d2r;
-            REFS['j3'].rotation.x = vals.j3 * d2r;
-            REFS['j4'].rotation.x = vals.j4 * d2r;
-            REFS['j5'].rotation.z = vals.j5 * d2r;
             
+            const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -currentAngles.j1 * d2r);
+            REFS['j1'].quaternion.copy(q1);
+            const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j2 * d2r);
+            REFS['j2'].quaternion.copy(q2);
+            const q3 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j3 * d2r);
+            REFS['j3'].quaternion.copy(q3);
+            const q4 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j4 * d2r);
+            REFS['j4'].quaternion.copy(q4);
+            const q5 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), currentAngles.j5 * d2r);
+            REFS['j5'].quaternion.copy(q5);
+            
+            const gVal = currentAngles.j6;
             REFS['grp_gripper'].children.forEach(c => {
-                if(c.position.x < 0) c.rotation.y = (vals.j6/100)*45*d2r;
-                else if(c.position.x > 0) c.rotation.y = -(vals.j6/100)*45*d2r;
+                if(c.position.x < 0) c.rotation.y = (gVal/100)*45*d2r;
+                else if(c.position.x > 0) c.rotation.y = -(gVal/100)*45*d2r;
             });
 
             scene.updateMatrixWorld(true);
 
+            checkGrab(gVal);
+
             let html = '';
             jointsForTorque.forEach(j => {
                 let t = calculateTorque(j.ref);
-                
-                // アシスト機能: Pitch軸（重力に逆らう関節）のみ軽減
-                if (j.type === 'pitch' && assistTorque > 0) {
-                    t = Math.max(0, t - assistTorque);
-                }
-
+                if (j.type === 'pitch' && assistTorque > 0) t = Math.max(0, t - assistTorque);
                 const limit = TORQUE_LIMIT_SINGLE;
                 const p = Math.min((t/limit)*100, 100);
-                
                 let col = "#00ff00";
                 if(t > limit) col = "#ff0044";
                 else if(t > limit*0.8) col = "#ffff00";
-                
                 html += `
                 <div class="torque-item">
                     <span style="width:50px;">${j.name}</span>
@@ -462,16 +877,27 @@
                 </div>`;
             });
             torqueListEl.innerHTML = html;
+            
+            // 凡例のカメラ同期
+            legendCamera.quaternion.copy(camera.quaternion);
+            legendRenderer.render(legendScene, legendCamera);
         }
 
-        Object.values(sliders).forEach(s => s.addEventListener('input', updateRobot));
+        Object.values(sliders).forEach(s => s.addEventListener('input', () => {
+            isAnimating = false; 
+        }));
         
         window.resetPose = function() {
-            Object.values(sliders).forEach(s => s.value = s.defaultValue);
-            updateRobot();
+            setTargetAngle({ j1:0, j2:0, j3:0, j4:0, j5:0, j6:0 });
         };
 
-        updatePhysicsParams();
+        function setTargetAngle(newAngles) {
+            for(let k in newAngles) targetAngles[k] = newAngles[k];
+            isAnimating = true;
+        }
+
+        resetTarget(); 
+        updatePhysicsParams(); 
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
@@ -481,6 +907,7 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            updateRobotState(); 
             controls.update();
             renderer.render(scene, camera);
         }
