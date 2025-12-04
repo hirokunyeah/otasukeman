@@ -180,6 +180,14 @@
         const mainPanel = document.getElementById('main-panel');
         let isDragging = false;
         let offset = { x: 0, y: 0 };
+        const VERSION_KEY = 'robotarm_app_version';
+        const storedVersion = parseInt(localStorage.getItem(VERSION_KEY) || '0', 10);
+        const currentVersion = storedVersion + 1;
+        localStorage.setItem(VERSION_KEY, currentVersion);
+        const versionBadge = document.createElement('span');
+        versionBadge.className = 'text-[10px] text-neutral-400 tracking-wider uppercase';
+        versionBadge.textContent = `Version ${currentVersion}`;
+        dragHandle.appendChild(versionBadge);
 
         dragHandle.addEventListener('mousedown', (e) => {
             if(e.target.tagName === 'BUTTON') return;
@@ -281,11 +289,7 @@
                 dropMarker.position.copy(dropPoint);
                 dropMarker.visible = true;
                 customDropTargetSet = true;
-                dropTargetRobot.set(
-                    dropPoint.x * BASE_SCALE_FACTOR,
-                    dropPoint.y * BASE_SCALE_FACTOR,
-                    dropPoint.z * BASE_SCALE_FACTOR
-                );
+                dropTargetRobot.copy(dropPoint);
             }
         };
         renderer.domElement.addEventListener('pointerdown', handleScenePointerDown);
@@ -460,6 +464,13 @@
         const pointer = new THREE.Vector2();
         const dropPoint = new THREE.Vector3();
         const dropTargetRobot = new THREE.Vector3();
+        const robotDropTarget = new THREE.Vector3();
+        const worldToRobot = (world, target) => {
+            target.set(-world.x * BASE_SCALE_FACTOR, world.y * BASE_SCALE_FACTOR, world.z * BASE_SCALE_FACTOR);
+        };
+        const robotToWorld = (robot, target) => {
+            target.set(-robot.x / BASE_SCALE_FACTOR, robot.y / BASE_SCALE_FACTOR, robot.z / BASE_SCALE_FACTOR);
+        };
         let customDropTargetSet = false;
         const dropMarker = new THREE.Mesh(
             new THREE.SphereGeometry(0.05, 16, 16),
@@ -597,19 +608,23 @@
                 alert('配置先をクリックしてドロップマーカーを設定してください。');
                 return;
             }
-            const placeX = dropTargetRobot.x;
-            const placeZ = dropTargetRobot.z;
-            const placeY = dropTargetRobot.y + boxHalfH - 0.01;
+            worldToRobot(dropTargetRobot, robotDropTarget);
+            const placeX = robotDropTarget.x;
+            const placeZ = robotDropTarget.z;
+            const placeY = robotDropTarget.y + boxHalfH - 0.01;
 
             // Ghostを表示 (unitへ戻す)
-            const ghostPos = new THREE.Vector3(placeX, placeY + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
-            ghostObj.position.copy(ghostPos);
+            const ghostWorld = new THREE.Vector3();
+            robotToWorld(new THREE.Vector3(placeX, placeY + boxHalfH, placeZ), ghostWorld);
+            ghostObj.position.copy(ghostWorld);
             ghostObj.rotation.set(0,0,0);
 
             // Draw Place Line (Green)
-            const placeStart = new THREE.Vector3(placeX, placeY + 0.15 + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
-            const placeEnd = new THREE.Vector3(placeX, placeY + boxHalfH, placeZ).divideScalar(BASE_SCALE_FACTOR);
-            debugLinePlace = drawLine(placeStart, placeEnd, debugLineMatGreen, scene);
+            const placeStartWorld = new THREE.Vector3();
+            const placeEndWorld = new THREE.Vector3();
+            robotToWorld(new THREE.Vector3(placeX, placeY + 0.15 + boxHalfH, placeZ), placeStartWorld);
+            robotToWorld(new THREE.Vector3(placeX, placeY + boxHalfH, placeZ), placeEndWorld);
+            debugLinePlace = drawLine(placeStartWorld, placeEndWorld, debugLineMatGreen, scene);
 
             const ikHoverPlace = solveIK(placeX, placeY + 0.15, placeZ);
             const ikPlace = solveIK(placeX, placeY, placeZ);
