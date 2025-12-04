@@ -72,6 +72,20 @@
         .btn-primary:hover { background: #0066cc; }
 
         #info { position: absolute; bottom: 10px; left: 10px; color: #888; font-size: 12px; pointer-events: none; }
+        #position-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #fff;
+            font-size: 12px;
+            padding: 8px 10px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            pointer-events: none;
+            min-width: 200px;
+            line-height: 1.4;
+        }
 
         /* 軸の凡例 */
         #axis-legend {
@@ -169,6 +183,7 @@
         </div>
     </div>
 
+    <div id="position-info"></div>
     <div id="info">Mouse: Rotate / Zoom / Pan <br> 
     <span style="color:#ff3333;">Red: Pick</span> / <span style="color:#33ff33;">Green: Place</span> / <span style="color:#00aaff;">Ghost: Target Loc</span></div>
     
@@ -176,6 +191,7 @@
 
     <script>
         const uiContainer = document.getElementById('ui-container');
+        const positionInfoEl = document.getElementById('position-info');
         const dragHandle = document.getElementById('drag-handle');
         const mainPanel = document.getElementById('main-panel');
         let isDragging = false;
@@ -346,6 +362,32 @@
             return line;
         }
 
+        function formatVec(vec) {
+            return `(${vec.x.toFixed(2)}, ${vec.y.toFixed(2)}, ${vec.z.toFixed(2)})`;
+        }
+
+        function updatePositionHUD() {
+            if(!positionInfoEl) return;
+            const objPos = new THREE.Vector3();
+            targetObj.getWorldPosition(objPos);
+
+            let dropLabel = '---';
+            if(dropMarker.visible) {
+                dropLabel = formatVec(dropMarker.position);
+            }
+
+            let placeLabel = '---';
+            if(customDropTargetSet) {
+                const placeWorld = new THREE.Vector3();
+                robotToWorld(robotDropTarget, placeWorld);
+                placeLabel = formatVec(placeWorld);
+            }
+
+            positionInfoEl.innerHTML = `オブジェクト: ${formatVec(objPos)}<br>` +
+                `ドロップポイント: ${dropLabel}<br>` +
+                `アーム配置先: ${placeLabel}`;
+        }
+
         function createBox(w, h, d, mat, parent, pos, name) {
             const geom = new THREE.BoxGeometry(w, h, d);
             const mesh = new THREE.Mesh(geom, mat);
@@ -466,10 +508,11 @@
         const dropTargetRobot = new THREE.Vector3();
         const robotDropTarget = new THREE.Vector3();
         const worldToRobot = (world, target) => {
-            target.set(-world.x * BASE_SCALE_FACTOR, world.y * BASE_SCALE_FACTOR, world.z * BASE_SCALE_FACTOR);
+            // Pick時と同じく、ワールド座標をそのままスケール変換する
+            target.set(world.x * BASE_SCALE_FACTOR, world.y * BASE_SCALE_FACTOR, world.z * BASE_SCALE_FACTOR);
         };
         const robotToWorld = (robot, target) => {
-            target.set(-robot.x / BASE_SCALE_FACTOR, robot.y / BASE_SCALE_FACTOR, robot.z / BASE_SCALE_FACTOR);
+            target.set(robot.x / BASE_SCALE_FACTOR, robot.y / BASE_SCALE_FACTOR, robot.z / BASE_SCALE_FACTOR);
         };
         let customDropTargetSet = false;
         const dropMarker = new THREE.Mesh(
@@ -892,6 +935,8 @@
                 </div>`;
             });
             torqueListEl.innerHTML = html;
+            
+            updatePositionHUD();
             
             // 凡例のカメラ同期
             legendCamera.quaternion.copy(camera.quaternion);
