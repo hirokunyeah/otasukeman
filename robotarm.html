@@ -169,10 +169,10 @@
 
                 <div id="tab-pose" class="tab-content active">
                     <div class="control-group"><label>1. Base (Yaw) <span id="val1">0°</span></label><input type="range" id="j1" min="-180" max="180" value="0"></div>
-                    <div class="control-group"><label>2. Root (Pitch) <span id="val2">-122°</span></label><input type="range" id="j2" min="-180" max="180" value="-122"></div>
-                    <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">127°</span></label><input type="range" id="j3" min="-180" max="180" value="127"></div>
-                    <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">30°</span></label><input type="range" id="j4" min="-180" max="180" value="30"></div>
-                    <div class="control-group"><label>5. Roll <span id="val5">0°</span></label><input type="range" id="j5" min="-180" max="180" value="0"></div>
+                    <div class="control-group"><label>2. Root (Pitch) <span id="val2">90°</span></label><input type="range" id="j2" min="0" max="180" value="90"></div>
+                    <div class="control-group"><label>3. Elbow (Pitch) <span id="val3">90°</span></label><input type="range" id="j3" min="0" max="180" value="90"></div>
+                    <div class="control-group"><label>4. Wrist (Pitch) <span id="val4">90°</span></label><input type="range" id="j4" min="0" max="180" value="90"></div>
+                    <div class="control-group"><label>5. Roll <span id="val5">90°</span></label><input type="range" id="j5" min="0" max="180" value="90"></div>
                     
                     <div class="control-group"><label>6. Gripper <span id="val6">0%</span></label><input type="range" id="j6" min="0" max="100" value="0"></div>
                     
@@ -302,7 +302,23 @@
         const GRAVITY = 9.80665;
         const BASE_SCALE_FACTOR = 0.12 / 2.5; 
 
-        const DEFAULT_POSE = { j1:0, j2:-122, j3:127, j4:30, j5:0, j6:0 };
+        const DEFAULT_POSE = { j1:0, j2:90, j3:90, j4:90, j5:90, j6:0 };
+        const JOINT_LIMITS = {
+            j1: { min: -180, max: 180 },
+            j2: { min: 0, max: 180 },
+            j3: { min: 0, max: 180 },
+            j4: { min: 0, max: 180 },
+            j5: { min: 0, max: 180 },
+            j6: { min: 0, max: 100 }
+        };
+        function clampJointAngle(key, value) {
+            if (value === undefined || value === null) return undefined;
+            const numeric = Number(value);
+            if (Number.isNaN(numeric)) return undefined;
+            const limit = JOINT_LIMITS[key];
+            if (!limit) return numeric;
+            return Math.min(limit.max, Math.max(limit.min, numeric));
+        }
         const targetAngles = { ...DEFAULT_POSE };
         const currentAngles = { ...DEFAULT_POSE };
         let isAnimating = false;
@@ -515,7 +531,7 @@
         createServo(pivotJ1, {x:0, y:0.2, z:0}, {x:0, y:0, z:0});
 
         const pivotJ2 = new THREE.Group();
-        pivotJ2.userData.axis = new THREE.Vector3(1, 0, 0);
+        pivotJ2.userData.axis = new THREE.Vector3(-1, 0, 0);
         pivotJ2.position.set(0, 0.6, 0);
         pivotJ1.add(pivotJ2);
         REFS['j2'] = pivotJ2;
@@ -683,7 +699,7 @@
             const gamma = Math.acos(Math.max(-1, Math.min(1, cos_gamma)));
 
             const theta_abs = beta + gamma;
-            const j2_rad = -theta_abs; 
+            const j2_rad = theta_abs > 0 ? theta_abs : 0; 
 
             const j4_rad = theta_abs - j3_rad + (Math.PI / 2);
 
@@ -789,7 +805,7 @@
             
             // ゴースト消去
             ghostObj.position.y = -10;
-            setTargetAngle({ j1: 0, j2: -122, j3: 127, j4: 30 }); 
+            setTargetAngle({ j1: 0, j2: 90, j3: 90, j4: 30 }); 
             await waitForReach(ARM_JOINTS);
         }
         window.startAutoPickAndPlace = startAutoPickAndPlace;
@@ -977,7 +993,9 @@
                 if(!moving) isAnimating = false; 
             } else {
                 for(let k in sliders) {
-                    currentAngles[k] = parseFloat(sliders[k].value);
+                    const sliderVal = parseFloat(sliders[k].value);
+                    const clamped = clampJointAngle(k, sliderVal);
+                    currentAngles[k] = clamped !== undefined ? clamped : sliderVal;
                     targetAngles[k] = currentAngles[k]; 
                 }
             }
@@ -990,13 +1008,17 @@
             
             const q1 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -currentAngles.j1 * d2r);
             REFS['j1'].quaternion.copy(q1);
-            const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j2 * d2r);
+            const axisJ2 = REFS['j2'].userData.axis ? REFS['j2'].userData.axis.clone().normalize() : new THREE.Vector3(1, 0, 0);
+            const q2 = new THREE.Quaternion().setFromAxisAngle(axisJ2, currentAngles.j2 * d2r);
             REFS['j2'].quaternion.copy(q2);
-            const q3 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j3 * d2r);
+            const axisJ3 = REFS['j3'].userData.axis ? REFS['j3'].userData.axis.clone().normalize() : new THREE.Vector3(1, 0, 0);
+            const q3 = new THREE.Quaternion().setFromAxisAngle(axisJ3, currentAngles.j3 * d2r);
             REFS['j3'].quaternion.copy(q3);
-            const q4 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), currentAngles.j4 * d2r);
+            const axisJ4 = REFS['j4'].userData.axis ? REFS['j4'].userData.axis.clone().normalize() : new THREE.Vector3(1, 0, 0);
+            const q4 = new THREE.Quaternion().setFromAxisAngle(axisJ4, currentAngles.j4 * d2r);
             REFS['j4'].quaternion.copy(q4);
-            const q5 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), currentAngles.j5 * d2r);
+            const axisJ5 = REFS['j5'].userData.axis ? REFS['j5'].userData.axis.clone().normalize() : new THREE.Vector3(0, 0, 1);
+            const q5 = new THREE.Quaternion().setFromAxisAngle(axisJ5, currentAngles.j5 * d2r);
             REFS['j5'].quaternion.copy(q5);
             
             const gVal = currentAngles.j6;
@@ -1043,7 +1065,11 @@
         };
 
         function setTargetAngle(newAngles) {
-            for(let k in newAngles) targetAngles[k] = newAngles[k];
+            for(let k in newAngles) {
+                const clamped = clampJointAngle(k, newAngles[k]);
+                if (clamped === undefined) continue;
+                targetAngles[k] = clamped;
+            }
             isAnimating = true;
         }
 
@@ -1242,15 +1268,15 @@
             joints.forEach(key => {
                 const raw = candidates[key];
                 if (raw === undefined && payload[key] === undefined) return;
-                const value = Number(raw ?? payload[key]);
-                if (!Number.isNaN(value)) {
-                    parsed[key] = value;
+                const clamped = clampJointAngle(key, raw ?? payload[key]);
+                if (clamped !== undefined) {
+                    parsed[key] = clamped;
                 }
             });
             if (payload.joint && payload.value !== undefined && joints.includes(payload.joint)) {
-                const extra = Number(payload.value);
-                if (!Number.isNaN(extra)) {
-                    parsed[payload.joint] = extra;
+                const clamped = clampJointAngle(payload.joint, payload.value);
+                if (clamped !== undefined) {
+                    parsed[payload.joint] = clamped;
                 }
             }
             if (!Object.keys(parsed).length) return { applied: false };
