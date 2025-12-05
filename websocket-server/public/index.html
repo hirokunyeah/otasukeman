@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>シンプルWebSocketサーバ</title>
+    <style>
+        :root { font-family: 'Segoe UI', sans-serif; background:#0f1013; color:#ececec; }
+        body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0f1013; }
+        main { width:min(900px,100%); margin:24px; padding:24px; border-radius:16px; background:linear-gradient(145deg,#1c1e23,#0b0c10); box-shadow:0 20px 40px rgba(0,0,0,0.5); }
+        h1 { margin-top:0; font-size:1.5rem; color:#77d0ff; }
+        .row { display:flex; gap:10px; flex-wrap:wrap; }
+        label { font-size:0.9rem; color:#9aa3b5; }
+        input, textarea, button { background:#1e1f26; color:#fff; border:1px solid #444; border-radius:8px; font-size:0.95rem; }
+        textarea { resize:vertical; min-height:110px; width:100%; padding:12px; }
+        input { padding:10px 12px; flex:1; }
+        button { cursor:pointer; padding:10px 16px; border:none; border-radius:8px; background:#2b9cf1; color:#fff; transition:transform 0.15s ease, box-shadow 0.15s ease; }
+        button:disabled { opacity:0.5; cursor:not-allowed; }
+        button:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 10px 18px rgba(43,156,241,0.35); }
+        #log { margin-top:18px; max-height:320px; overflow:auto; border:1px solid #222; border-radius:12px; padding:10px; background:#0a0b0f; }
+        .log-entry { padding:6px 8px; border-bottom:1px solid #222; font-size:0.85rem; }
+        .log-entry:last-child { border-bottom:none; }
+        .log-entry.info { color:#9aa3b5; }
+        .log-entry.out { color:#69d5a7; }
+        .log-entry.in { color:#9cc8ff; }
+        .status-chip { font-size:0.8rem; padding:4px 10px; border-radius:999px; background:#1d1f25; border:1px solid #3a3d45; }
+        .status-chip.connected { border-color:#33ffaa; color:#33ffaa; }
+        .status-chip.closed { border-color:#ff4466; color:#ff4466; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>WebSocket サーバとクライアント UI</h1>
+        <div class="row" style="align-items:center; margin-bottom:12px;">
+            <label for="ws-url" class="status-chip" id="status-chip">未接続</label>
+            <input type="text" id="ws-url" value="ws://localhost:3000/ws" placeholder="ws://host:port/ws" />
+            <button id="connect-btn">接続</button>
+            <button id="disconnect-btn" disabled>切断</button>
+        </div>
+        <div class="row" style="margin-bottom:12px;">
+            <label for="ws-message">送信するテキスト (JSON 可)</label>
+        </div>
+        <textarea id="ws-message">{"type":"pose","angles":{"j1":0,"j2":-80,"j3":120,"j4":30,"j5":10,"j6":0}}</textarea>
+        <div class="row" style="margin-top:6px;">
+            <button id="send-btn" disabled>送信</button>
+            <button id="send-pose-btn" disabled>標準ポーズを送信</button>
+        </div>
+        <div id="log"></div>
+    </main>
+    <script>
+        const urlInput = document.getElementById('ws-url');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const sendBtn = document.getElementById('send-btn');
+        const sendPoseBtn = document.getElementById('send-pose-btn');
+        const logEl = document.getElementById('log');
+        const statusChip = document.getElementById('status-chip');
+        let ws = null;
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logEl.prepend(entry);
+        }
+
+        function updateControls() {
+            const connected = ws && ws.readyState === WebSocket.OPEN;
+            sendBtn.disabled = !connected;
+            sendPoseBtn.disabled = !connected;
+            disconnectBtn.disabled = !connected;
+            connectBtn.disabled = connected;
+            statusChip.textContent = connected ? '接続済み' : '未接続';
+            statusChip.classList.toggle('connected', connected);
+            statusChip.classList.toggle('closed', !connected);
+        }
+
+        function connect() {
+            if (ws) return;
+            try {
+                ws = new WebSocket(urlInput.value);
+            } catch (error) {
+                log('URLが不正です: ' + error.message, 'out');
+                return;
+            }
+            ws.addEventListener('open', () => {
+                log('サーバに接続しました', 'info');
+                updateControls();
+            });
+            ws.addEventListener('message', (event) => {
+                log('受信: ' + event.data, 'in');
+            });
+            ws.addEventListener('close', (event) => {
+                log(`接続が閉じられました (${event.code})`, 'info');
+                ws = null;
+                updateControls();
+            });
+            ws.addEventListener('error', (event) => {
+                log('通信エラーが発生しました', 'info');
+            });
+            updateControls();
+        }
+
+        function disconnect() {
+            if (!ws) return;
+            ws.close();
+        }
+
+        function send(value) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(value);
+            log('送信: ' + value, 'out');
+        }
+
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', () => send(document.getElementById('ws-message').value.trim()));
+        sendPoseBtn.addEventListener('click', () => {
+            const pose = { type: 'pose', angles: { j1: 10, j2: -90, j3: 110, j4: 20, j5: 0, j6: 0 } };
+            document.getElementById('ws-message').value = JSON.stringify(pose);
+            send(JSON.stringify(pose));
+        });
+        updateControls();
+    </script>
+</body>
+</html>

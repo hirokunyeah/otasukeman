@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RobotArm WebSocket Message",
+  "description": "robotarm.html と統合 WebSocket サーバ間のメッセージ構造。",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "description": "メッセージ種別 (例: 'pose'、'broadcast' など)",
+      "default": "pose"
+    },
+    "message": {
+      "type": "string",
+      "description": "JARVIS などの声掛けテキスト"
+    },
+    "angles": {
+      "$ref": "#/$defs/angleSet",
+      "description": "単一ステップで指定する関節角度"
+    },
+    "sequence": {
+      "type": "array",
+      "description": "アニメーションを構成するステップの配列",
+      "items": {
+        "$ref": "#/$defs/sequenceStep"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "sequence と同義の別名",
+      "items": {
+        "$ref": "#/$defs/sequenceStep"
+      }
+    },
+    "body": {
+      "type": "object",
+      "description": "サーバがブロードキャストでラップするペイロード",
+      "properties": {
+        "message": { "type": "string" },
+        "angles": { "$ref": "#/$defs/angleSet" },
+        "sequence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sequenceStep" }
+        },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sequenceStep" }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["type"],
+  "additionalProperties": true,
+  "$defs": {
+    "angleSet": {
+      "type": "object",
+      "properties": {
+        "j1": { "type": "number" },
+        "j2": { "type": "number" },
+        "j3": { "type": "number" },
+        "j4": { "type": "number" },
+        "j5": { "type": "number" },
+        "j6": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "sequenceStep": {
+      "type": "object",
+      "properties": {
+        "angles": { "$ref": "#/$defs/angleSet" },
+        "duration": {
+          "type": "number",
+          "description": "ステップ継続時間 (ミリ秒)",
+          "minimum": 50
+        },
+        "interval": {
+          "type": "number",
+          "description": "duration と同義",
+          "minimum": 50
+        }
+      },
+      "required": ["angles"],
+      "anyOf": [
+        { "required": ["duration"] },
+        { "required": ["interval"] }
+      ],
+      "additionalProperties": false
+    }
+  }
+}

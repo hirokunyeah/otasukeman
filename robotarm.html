@@ -108,6 +108,45 @@
         .grab-status { font-weight: bold; padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-left:5px;}
         .grabbed { background: #00ff00; color: #000; }
         .released { background: #555; color: #aaa; }
+        .ws-control {
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid #444;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .ws-control h3 {
+            margin: 0 0 6px;
+            font-size: 13px;
+            color: #ff88aa;
+        }
+        .ws-control .ws-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            gap: 6px;
+        }
+        .ws-control .ws-row input {
+            flex: 1;
+            min-width: 0;
+        }
+        .ws-control .ws-status {
+            font-weight: bold;
+        }
+        .ws-control #ws-last-message {
+            font-size: 11px;
+            color: #aaa;
+            min-height: 22px;
+            margin-top: 2px;
+            word-break: break-word;
+        }
+        .ws-control button {
+            width: auto;
+            padding: 4px 10px;
+            font-size: 11px;
+        }
 
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -150,6 +189,23 @@
                                 <span class="unit">kg</span>
                             </div>
                         </div>
+                    </div>
+                    <div class="ws-control">
+                        <h3>WebSocket連携</h3>
+                        <div class="ws-row">
+                            <label class="config-label" for="ws-url-input">サーバ</label>
+                            <input type="text" id="ws-url-input" value="ws://localhost:3000/ws">
+                            <button type="button" id="ws-toggle-btn">接続</button>
+                        </div>
+                        <div class="ws-row">
+                            <span>状態</span>
+                            <span id="ws-status" class="ws-status status-warn">未接続</span>
+                        </div>
+                        <div class="ws-row">
+                            <span>最後の受信</span>
+                            <span id="ws-last-message">-</span>
+                        </div>
+                        <button type="button" id="ws-send-pose" style="margin-top:5px;" disabled>現在の姿勢を送信</button>
                     </div>
 
                     <div style="display:flex; gap:5px;">
@@ -1037,6 +1093,196 @@
             renderer.render(scene, camera);
         }
         animate();
+
+        const wsUrlInput = document.getElementById('ws-url-input');
+        const wsToggleBtn = document.getElementById('ws-toggle-btn');
+        const wsStatusEl = document.getElementById('ws-status');
+        const wsLastMessageEl = document.getElementById('ws-last-message');
+        const wsSendPoseBtn = document.getElementById('ws-send-pose');
+        let wsConnection = null;
+
+        function refreshWsStatus(text, severity = 'status-warn') {
+            wsStatusEl.textContent = text;
+            wsStatusEl.className = `ws-status ${severity}`;
+        }
+
+        function refreshSendButton() {
+            const ready = wsConnection && wsConnection.readyState === WebSocket.OPEN;
+            wsSendPoseBtn.disabled = !ready;
+        }
+
+        function refreshToggleButton() {
+            wsToggleBtn.textContent = wsConnection ? '切断' : '接続';
+        }
+
+        function openWebSocket() {
+            const url = wsUrlInput.value.trim();
+            if (!url) {
+                refreshWsStatus('URLを入力してください', 'status-danger');
+                return;
+            }
+            try {
+                wsConnection = new WebSocket(url);
+            } catch (error) {
+                wsConnection = null;
+                refreshWsStatus('接続エラー', 'status-danger');
+                wsLastMessageEl.textContent = error.message || '接続失敗';
+                refreshSendButton();
+                refreshToggleButton();
+                return;
+            }
+            refreshToggleButton();
+            refreshWsStatus('接続中…');
+            wsLastMessageEl.textContent = '-';
+            wsConnection.addEventListener('open', () => {
+                refreshWsStatus('接続済み', 'status-safe');
+                refreshSendButton();
+            });
+            wsConnection.addEventListener('message', (event) => {
+                handleWsMessage(event);
+            });
+            wsConnection.addEventListener('close', () => {
+                refreshWsStatus('切断済み', 'status-warn');
+                wsConnection = null;
+                refreshSendButton();
+                refreshToggleButton();
+            });
+            wsConnection.addEventListener('error', () => {
+                refreshWsStatus('通信エラー', 'status-danger');
+            });
+        }
+
+        function closeWebSocket() {
+            if (!wsConnection) return;
+            refreshWsStatus('切断中…', 'status-warn');
+            wsConnection.close();
+        }
+
+        function handleWsMessage(event) {
+            let payload;
+            try {
+                payload = JSON.parse(event.data);
+            } catch (error) {
+                wsLastMessageEl.textContent = `JSONエラー: ${event.data}`;
+                return;
+            }
+            const summary = applyRemoteAngles(payload);
+            if (summary.applied) {
+                wsLastMessageEl.textContent = `受信: ${summary.summary}`;
+            } else {
+                wsLastMessageEl.textContent = '受信データなし';
+            }
+        }
+
+        const JOINT_KEYS = ['j1','j2','j3','j4','j5','j6'];
+        const DEFAULT_STEP_DURATION = 700;
+        const animationQueue = [];
+        let animationRunning = false;
+
+        function clampStepDuration(value) {
+            const duration = Number(value);
+            if (Number.isNaN(duration)) return DEFAULT_STEP_DURATION;
+            return Math.max(50, duration);
+        }
+
+        function extractAngles(source) {
+            if (!source || typeof source !== 'object') return null;
+            const result = {};
+            JOINT_KEYS.forEach(key => {
+                const raw = source[key];
+                if (raw === undefined) return;
+                const value = Number(raw);
+                if (!Number.isNaN(value)) result[key] = value;
+            });
+            return Object.keys(result).length ? result : null;
+        }
+
+        function scheduleAnimationSequence(sequence) {
+            if (!Array.isArray(sequence)) return null;
+            const parsed = [];
+            sequence.forEach((step) => {
+                const anglesSource = step.angles || step;
+                const sanitizedAngles = extractAngles(anglesSource);
+                if (!sanitizedAngles) return;
+                parsed.push({
+                    angles: sanitizedAngles,
+                    duration: clampStepDuration(step.duration ?? step.interval ?? DEFAULT_STEP_DURATION)
+                });
+            });
+            if (!parsed.length) return null;
+            animationQueue.push(parsed);
+            processAnimationQueue();
+            const details = parsed.map((entry, index) => `step${index + 1}:${entry.duration}ms`).join(',');
+            return { summary: `sequence(${details})` };
+        }
+
+        async function processAnimationQueue() {
+            if (animationRunning) return;
+            animationRunning = true;
+            while (animationQueue.length) {
+                const sequence = animationQueue.shift();
+                for (const step of sequence) {
+                    setTargetAngle(step.angles);
+                    await new Promise(resolve => setTimeout(resolve, step.duration));
+                }
+            }
+            animationRunning = false;
+        }
+
+        function applyRemoteAngles(payload) {
+            if (!payload || typeof payload !== 'object') return { applied: false };
+            const sequenceSource = payload.sequence || payload.steps || payload.body?.sequence || payload.motion;
+            if (sequenceSource) {
+                const sequenceSummary = scheduleAnimationSequence(sequenceSource);
+                if (sequenceSummary) return { applied: true, summary: sequenceSummary.summary };
+            }
+            const candidates = payload.body?.angles || payload.angles || payload.pose || payload.body || {};
+            const joints = JOINT_KEYS;
+            const parsed = {};
+            joints.forEach(key => {
+                const raw = candidates[key];
+                if (raw === undefined && payload[key] === undefined) return;
+                const value = Number(raw ?? payload[key]);
+                if (!Number.isNaN(value)) {
+                    parsed[key] = value;
+                }
+            });
+            if (payload.joint && payload.value !== undefined && joints.includes(payload.joint)) {
+                const extra = Number(payload.value);
+                if (!Number.isNaN(extra)) {
+                    parsed[payload.joint] = extra;
+                }
+            }
+            if (!Object.keys(parsed).length) return { applied: false };
+            setTargetAngle(parsed);
+            const summary = Object.entries(parsed).map(([k, v]) => `${k}=${v}`).join(', ');
+            return { applied: true, summary };
+        }
+
+        function shareCurrentPose() {
+            if (!wsConnection || wsConnection.readyState !== WebSocket.OPEN) {
+                refreshWsStatus('接続されていません', 'status-warn');
+                return;
+            }
+            const snapshot = {};
+            Object.keys(targetAngles).forEach(key => {
+                snapshot[key] = Number(currentAngles[key].toFixed(2));
+            });
+            const payload = { type: 'pose_info', angles: snapshot };
+            wsConnection.send(JSON.stringify(payload));
+            wsLastMessageEl.textContent = '送信: ' + JSON.stringify(payload);
+        }
+
+        wsToggleBtn.addEventListener('click', () => {
+            if (wsConnection) {
+                closeWebSocket();
+            } else {
+                openWebSocket();
+            }
+        });
+        wsSendPoseBtn.addEventListener('click', shareCurrentPose);
+        refreshSendButton();
+        refreshToggleButton();
 
     </script>
 </body>
