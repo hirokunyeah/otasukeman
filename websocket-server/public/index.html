@@ -26,6 +26,9 @@
         .status-chip { font-size:0.8rem; padding:4px 10px; border-radius:999px; background:#1d1f25; border:1px solid #3a3d45; }
         .status-chip.connected { border-color:#33ffaa; color:#33ffaa; }
         .status-chip.closed { border-color:#ff4466; color:#ff4466; }
+        .ollama-panel { width:100%; border:1px solid #283a58; padding:12px; border-radius:10px; background:#0b1120; }
+        .ollama-panel input { flex:1; min-width:180px; }
+        #ollama-preview { margin-top:8px; border-radius:10px; padding:10px; background:#050914; border:1px solid #123153; font-size:0.85rem; color:#9cc8ff; min-height:90px; }
     </style>
 </head>
 <body>
@@ -45,6 +48,11 @@
             <button id="send-btn" disabled>送信</button>
             <button id="send-pose-btn" disabled>標準ポーズを送信</button>
         </div>
+        <div class="row ollama-panel">
+            <input type="text" id="ollama-command" placeholder="例: 手を振って" />
+            <button id="ollama-generate-btn">Ollama生成</button>
+        </div>
+        <pre id="ollama-preview" aria-live="polite">ここに生成された JSON が表示されます</pre>
         <div id="log"></div>
     </main>
     <script>
@@ -121,6 +129,45 @@
             send(JSON.stringify(pose));
         });
         updateControls();
+
+        const ollamaCommandInput = document.getElementById('ollama-command');
+        const ollamaGenerateBtn = document.getElementById('ollama-generate-btn');
+        const ollamaPreview = document.getElementById('ollama-preview');
+
+        async function generateFromOllama() {
+            const command = ollamaCommandInput.value.trim();
+            if (!command) {
+                log('命令を入力してください', 'info');
+                return;
+            }
+            log('Ollama命令送信: ' + command, 'info');
+            try {
+                const response = await fetch('/ollama', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command })
+                });
+                const payload = await response.json();
+                if (response.ok) {
+                    log('生成成功: ' + JSON.stringify(payload.payload), 'info');
+                } else {
+                    log('生成エラー: ' + (payload.error || response.status), 'out');
+                }
+                if (ollamaPreview) {
+                    ollamaPreview.textContent = JSON.stringify(payload.payload ?? payload, null, 2);
+                }
+            } catch (error) {
+                log('Ollamaリクエスト失敗: ' + error.message, 'out');
+            }
+        }
+
+        ollamaGenerateBtn.addEventListener('click', generateFromOllama);
+        ollamaCommandInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                generateFromOllama();
+            }
+        });
     </script>
 </body>
 </html>
