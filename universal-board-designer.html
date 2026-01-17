@@ -100,6 +100,7 @@
             }, {}),
             activeSize: { width: 0, height: 0 },
             draggedComponent: null,
+            draggedWireEndpoint: null,
             hoveredGrid: null
         };
 
@@ -107,7 +108,12 @@
         function createSVGElement(type, attributes = {}) {
             const element = document.createElementNS('http://www.w3.org/2000/svg', type);
             Object.keys(attributes).forEach(key => {
-                element.setAttribute(key, attributes[key]);
+                if (key === 'style') {
+                    // styleプロパティは特別に処理
+                    element.setAttribute('style', attributes[key]);
+                } else {
+                    element.setAttribute(key, attributes[key]);
+                }
             });
             return element;
         }
@@ -386,19 +392,21 @@
             state.wires.forEach(wire => {
                 const isSelected = state.selectedItem?.type === 'wire' && state.selectedItem.id === wire.id;
 
-                const wireGroup = createSVGElement('g');
-                wireGroup.classList.add('cursor-pointer', 'hover:opacity-80');
+                const wireGroup = createSVGElement('g', { 'data-wire-id': wire.id });
 
-                wireGroup.appendChild(createSVGElement('line', {
+                const hitBox = createSVGElement('line', {
                     x1: wire.startX * state.boardConfig.gridSize,
                     y1: wire.startY * state.boardConfig.gridSize,
                     x2: wire.endX * state.boardConfig.gridSize,
                     y2: wire.endY * state.boardConfig.gridSize,
                     stroke: 'transparent',
                     'stroke-width': state.boardConfig.gridSize / 2
-                }));
+                });
+                hitBox.style.pointerEvents = 'stroke';
+                hitBox.style.cursor = 'pointer';
+                wireGroup.appendChild(hitBox);
 
-                wireGroup.appendChild(createSVGElement('line', {
+                const visibleLine = createSVGElement('line', {
                     x1: wire.startX * state.boardConfig.gridSize,
                     y1: wire.startY * state.boardConfig.gridSize,
                     x2: wire.endX * state.boardConfig.gridSize,
@@ -407,7 +415,10 @@
                     'stroke-width': Math.max(2, state.boardConfig.gridSize * 0.15),
                     'stroke-linecap': 'round',
                     opacity: 0.9
-                }));
+                });
+                visibleLine.style.pointerEvents = 'stroke';
+                visibleLine.style.cursor = 'pointer';
+                wireGroup.appendChild(visibleLine);
 
                 if (isSelected) {
                     wireGroup.appendChild(createSVGElement('line', {
@@ -417,15 +428,10 @@
                         y2: wire.endY * state.boardConfig.gridSize,
                         stroke: 'white',
                         'stroke-width': 1,
-                        'stroke-dasharray': '2,2'
+                        'stroke-dasharray': '2,2',
+                        'pointer-events': 'none'
                     }));
                 }
-
-                wireGroup.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    state.selectedItem = { type: 'wire', id: wire.id };
-                    render();
-                });
 
                 wiresGroup.appendChild(wireGroup);
             });
@@ -553,6 +559,68 @@
             });
 
             mainGroup.appendChild(componentsGroup);
+
+            // ワイヤー端点のハンドル表示（選択時）
+            const currentSelectedWire = state.selectedItem?.type === 'wire' 
+                ? state.wires.find(w => w.id === state.selectedItem.id) 
+                : null;
+
+            if (currentSelectedWire) {
+                const uiOverlay = createSVGElement('g', { class: 'ui-overlay' });
+
+                // 開始点のハンドル
+                const startHandleHitBox = createSVGElement('circle', {
+                    cx: currentSelectedWire.startX * state.boardConfig.gridSize,
+                    cy: currentSelectedWire.startY * state.boardConfig.gridSize,
+                    r: Math.max(8, state.boardConfig.gridSize / 2),
+                    fill: 'transparent',
+                    style: 'cursor: grab;',
+                    'pointer-events': 'auto'
+                });
+                startHandleHitBox.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    handleWireEndpointDragStart(e, currentSelectedWire.id, 'start');
+                });
+                uiOverlay.appendChild(startHandleHitBox);
+                
+                uiOverlay.appendChild(createSVGElement('circle', {
+                    cx: currentSelectedWire.startX * state.boardConfig.gridSize,
+                    cy: currentSelectedWire.startY * state.boardConfig.gridSize,
+                    r: 6,
+                    fill: 'white',
+                    stroke: currentSelectedWire.color,
+                    'stroke-width': 2,
+                    'pointer-events': 'none'
+                }));
+
+                // 終了点のハンドル
+                const endHandleHitBox = createSVGElement('circle', {
+                    cx: currentSelectedWire.endX * state.boardConfig.gridSize,
+                    cy: currentSelectedWire.endY * state.boardConfig.gridSize,
+                    r: Math.max(8, state.boardConfig.gridSize / 2),
+                    fill: 'transparent',
+                    style: 'cursor: grab;',
+                    'pointer-events': 'auto'
+                });
+                endHandleHitBox.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    handleWireEndpointDragStart(e, currentSelectedWire.id, 'end');
+                });
+                uiOverlay.appendChild(endHandleHitBox);
+                
+                uiOverlay.appendChild(createSVGElement('circle', {
+                    cx: currentSelectedWire.endX * state.boardConfig.gridSize,
+                    cy: currentSelectedWire.endY * state.boardConfig.gridSize,
+                    r: 6,
+                    fill: 'white',
+                    stroke: currentSelectedWire.color,
+                    'stroke-width': 2,
+                    'pointer-events': 'none'
+                }));
+
+                mainGroup.appendChild(uiOverlay);
+            }
+
             svg.appendChild(mainGroup);
         }
 
@@ -957,7 +1025,19 @@
 
         // ========== Event Handlers ==========
         function handleSVGMouseDown(e) {
-            if (state.draggedComponent) return;
+            // 配線クリックの検出
+            if (e.target.tagName === 'line') {
+                const wireGroup = e.target.closest('[data-wire-id]');
+                if (wireGroup) {
+                    const wireId = wireGroup.getAttribute('data-wire-id');
+                    console.log('Wire clicked via SVG mousedown:', wireId);
+                    state.selectedItem = { type: 'wire', id: wireId };
+                    render();
+                    return;
+                }
+            }
+
+            if (state.draggedComponent || state.draggedWireEndpoint) return;
             if (e.button === 2) return;
 
             const { x, y } = getGridCoords(e.clientX, e.clientY);
@@ -984,7 +1064,19 @@
                 state.hoveredGrid = { x, y };
             }
 
-            if (state.draggedComponent) {
+            if (state.draggedWireEndpoint) {
+                const wire = state.wires.find(w => w.id === state.draggedWireEndpoint.id);
+                if (wire) {
+                    if (state.draggedWireEndpoint.type === 'start') {
+                        wire.startX = x;
+                        wire.startY = y;
+                    } else if (state.draggedWireEndpoint.type === 'end') {
+                        wire.endX = x;
+                        wire.endY = y;
+                    }
+                }
+                render();
+            } else if (state.draggedComponent) {
                 const newPixelX = (x - state.draggedComponent.offsetX) * state.boardConfig.gridSize;
                 const newPixelY = (y - state.draggedComponent.offsetY) * state.boardConfig.gridSize;
 
@@ -1030,6 +1122,9 @@
             }
             if (state.draggedComponent) {
                 state.draggedComponent = null;
+            }
+            if (state.draggedWireEndpoint) {
+                state.draggedWireEndpoint = null;
             }
             render();
         }
@@ -1094,6 +1189,13 @@
                 }
                 render();
             }
+        }
+
+        function handleWireEndpointDragStart(e, wireId, endpointType) {
+            e.stopPropagation();
+            if (e.button === 2) return;
+            state.selectedItem = { type: 'wire', id: wireId };
+            state.draggedWireEndpoint = { id: wireId, type: endpointType };
         }
 
         // ========== State Mutations ==========
