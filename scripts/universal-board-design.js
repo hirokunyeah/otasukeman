@@ -35,7 +35,35 @@ const COMPONENT_PREFIXES = {
   capacitor: 'C',
   led: 'D',
   ic_dip: 'U',
-  jumper: 'J'
+  jumper: 'J',
+  general: 'P' // 汎用部品用
+};
+
+// 部品ごとのピン位置（相対座標）を取得するヘルパー
+const getComponentPinOffsets = (type, width, height) => {
+  const pins = [];
+  if (type === 'resistor' || type === 'capacitor') {
+    // 左右の端
+    pins.push({ x: 0, y: 0 });
+    pins.push({ x: width - 1, y: 0 });
+  } else if (type === 'led') {
+    // LEDは1マス
+    pins.push({ x: 0, y: 0 });
+  } else if (type === 'ic_dip') {
+    // 上下の列
+    for (let x = 0; x < width; x++) {
+      pins.push({ x, y: 0 });
+      pins.push({ x, y: height - 1 });
+    }
+  } else if (type === 'jumper' || type === 'general') {
+    // 矩形内の全点
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        pins.push({ x, y });
+      }
+    }
+  }
+  return pins;
 };
 
 // 部品定義
@@ -184,6 +212,51 @@ const COMPONENT_DEFINITIONS = {
           {bodyW > 20 && bodyH > 10 && (
             <text x={w/2} y={h/2} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="8" style={{ pointerEvents: 'none' }}>IC</text>
           )}
+          {pins}
+        </g>
+      );
+    }
+  },
+  GENERAL: {
+    id: 'general',
+    name: '汎用部品',
+    defaultWidth: 3, 
+    defaultHeight: 1,
+    render: (w, h, gridSize, gridW, gridH) => {
+      // 全てのグリッド交点にピンを表示
+      const pins = [];
+      for(let y=0; y<gridH; y++) {
+        for(let x=0; x<gridW; x++) {
+          const cx = x * gridSize + gridSize / 2;
+          const cy = y * gridSize + gridSize / 2;
+          pins.push(
+            <circle 
+              key={`${x}-${y}`}
+              cx={cx} 
+              cy={cy} 
+              r={3} 
+              fill="#9ca3af" 
+              stroke="#4b5563"
+              strokeWidth={1}
+            />
+          );
+        }
+      }
+      
+      const padding = 2;
+      return (
+        <g>
+          <rect 
+            x={padding} 
+            y={padding} 
+            width={w - padding*2} 
+            height={h - padding*2} 
+            fill="#8b5cf6" 
+            fillOpacity="0.4" 
+            stroke="#7c3aed" 
+            strokeWidth="2" 
+            rx="4" 
+          />
           {pins}
         </g>
       );
@@ -366,14 +439,42 @@ export default function UniversalBoardDesigner() {
     }
 
     if (draggedComponent) {
+      // 1. 部品の新しい位置（ピクセル）を計算
+      const newPixelX = (x - draggedComponent.offsetX) * boardConfig.gridSize;
+      const newPixelY = (y - draggedComponent.offsetY) * boardConfig.gridSize;
+
+      // 2. 部品を更新
       setComponents(prev => prev.map(comp => {
         if (comp.id === draggedComponent.id) {
-          const newX = (x - draggedComponent.offsetX) * boardConfig.gridSize;
-          const newY = (y - draggedComponent.offsetY) * boardConfig.gridSize;
-          return { ...comp, x: newX, y: newY };
+          return { ...comp, x: newPixelX, y: newPixelY };
         }
         return comp;
       }));
+
+      // 3. ワイヤーの追従（グリッド座標の変化があった場合）
+      const currentGridX = Math.round(newPixelX / boardConfig.gridSize);
+      const currentGridY = Math.round(newPixelY / boardConfig.gridSize);
+      const deltaX = currentGridX - draggedComponent.initialGridX;
+      const deltaY = currentGridY - draggedComponent.initialGridY;
+
+      // 配線が接続されている場合のみ更新
+      if (draggedComponent.connectedWires && draggedComponent.connectedWires.length > 0) {
+        setWires(prevWires => prevWires.map(w => {
+           // このワイヤーの始点/終点がドラッグ中の部品に接続されているか確認
+           const startConn = draggedComponent.connectedWires.find(cw => cw.id === w.id && cw.type === 'start');
+           const endConn = draggedComponent.connectedWires.find(cw => cw.id === w.id && cw.type === 'end');
+           
+           if (!startConn && !endConn) return w; // 無関係なワイヤーはそのまま
+
+           return {
+             ...w,
+             startX: startConn ? startConn.initialX + deltaX : w.startX,
+             startY: startConn ? startConn.initialY + deltaY : w.startY,
+             endX: endConn ? endConn.initialX + deltaX : w.endX,
+             endY: endConn ? endConn.initialY + deltaY : w.endY,
+           };
+        }));
+      }
     }
   };
 
@@ -527,10 +628,44 @@ export default function UniversalBoardDesigner() {
       const comp = components.find(c => c.id === id);
       setSelectedItem({ type: 'component', id });
       if (comp) {
+        // 現在の部品のピン位置（絶対グリッド座標）を計算
+        const pinOffsets = getComponentPinOffsets(comp.type, comp.width, comp.height);
+        const currentPins = pinOffsets.map(p => {
+          // 回転を適用 (0, 90, 180, 270)
+          // 回転軸は (0,0) つまり部品の基準点
+          let rx = p.x;
+          let ry = p.y;
+          if (comp.rotation === 90) { rx = -p.y; ry = p.x; }
+          else if (comp.rotation === 180) { rx = -p.x; ry = -p.y; }
+          else if (comp.rotation === 270) { rx = p.y; ry = -p.x; }
+          
+          return {
+            x: Math.round(comp.x / boardConfig.gridSize) + rx,
+            y: Math.round(comp.y / boardConfig.gridSize) + ry
+          };
+        });
+
+        // 接続されている配線を検索
+        const connectedWires = [];
+        wires.forEach(wire => {
+          // 始点が接続されているか
+          if (currentPins.some(p => p.x === wire.startX && p.y === wire.startY)) {
+            connectedWires.push({ id: wire.id, type: 'start', initialX: wire.startX, initialY: wire.startY });
+          }
+          // 終点が接続されているか
+          if (currentPins.some(p => p.x === wire.endX && p.y === wire.endY)) {
+            connectedWires.push({ id: wire.id, type: 'end', initialX: wire.endX, initialY: wire.endY });
+          }
+        });
+
         setDraggedComponent({
           id,
           offsetX: x - (comp.x / boardConfig.gridSize),
-          offsetY: y - (comp.y / boardConfig.gridSize)
+          offsetY: y - (comp.y / boardConfig.gridSize),
+          // ドラッグ開始時のグリッド座標と接続ワイヤー情報を保存
+          initialGridX: Math.round(comp.x / boardConfig.gridSize),
+          initialGridY: Math.round(comp.y / boardConfig.gridSize),
+          connectedWires
         });
       }
     }
@@ -781,6 +916,7 @@ export default function UniversalBoardDesigner() {
                     {comp.id === 'led' && <Zap size={14} className="text-red-500" />}
                     {comp.id === 'ic_dip' && <Cpu size={14} className="text-gray-800" />}
                     {comp.id === 'capacitor' && <Box size={14} className="text-blue-500" />}
+                    {comp.id === 'general' && <Box size={14} className="text-purple-500" />}
                     {comp.id === 'jumper' && (
                       <div className="flex gap-0.5">
                         <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full" />
