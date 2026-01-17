@@ -394,26 +394,29 @@
 
                 const wireGroup = createSVGElement('g', { 'data-wire-id': wire.id });
 
-                const hitBox = createSVGElement('line', {
-                    x1: wire.startX * state.boardConfig.gridSize,
-                    y1: wire.startY * state.boardConfig.gridSize,
-                    x2: wire.endX * state.boardConfig.gridSize,
-                    y2: wire.endY * state.boardConfig.gridSize,
+                const x1 = wire.startX * state.boardConfig.gridSize;
+                const y1 = wire.startY * state.boardConfig.gridSize;
+                const x2 = wire.endX * state.boardConfig.gridSize;
+                const y2 = wire.endY * state.boardConfig.gridSize;
+                const points = `${x1},${y1} ${x2},${y1} ${x2},${y2}`;
+
+                const hitBox = createSVGElement('polyline', {
+                    points: points,
                     stroke: 'transparent',
+                    fill: 'none',
                     'stroke-width': state.boardConfig.gridSize / 2
                 });
                 hitBox.style.pointerEvents = 'stroke';
                 hitBox.style.cursor = 'pointer';
                 wireGroup.appendChild(hitBox);
 
-                const visibleLine = createSVGElement('line', {
-                    x1: wire.startX * state.boardConfig.gridSize,
-                    y1: wire.startY * state.boardConfig.gridSize,
-                    x2: wire.endX * state.boardConfig.gridSize,
-                    y2: wire.endY * state.boardConfig.gridSize,
+                const visibleLine = createSVGElement('polyline', {
+                    points: points,
                     stroke: wire.color,
+                    fill: 'none',
                     'stroke-width': Math.max(2, state.boardConfig.gridSize * 0.15),
                     'stroke-linecap': 'round',
+                    'stroke-linejoin': 'round',
                     opacity: 0.9
                 });
                 visibleLine.style.pointerEvents = 'stroke';
@@ -421,12 +424,10 @@
                 wireGroup.appendChild(visibleLine);
 
                 if (isSelected) {
-                    wireGroup.appendChild(createSVGElement('line', {
-                        x1: wire.startX * state.boardConfig.gridSize,
-                        y1: wire.startY * state.boardConfig.gridSize,
-                        x2: wire.endX * state.boardConfig.gridSize,
-                        y2: wire.endY * state.boardConfig.gridSize,
+                    wireGroup.appendChild(createSVGElement('polyline', {
+                        points: points,
                         stroke: 'white',
+                        fill: 'none',
                         'stroke-width': 1,
                         'stroke-dasharray': '2,2',
                         'pointer-events': 'none'
@@ -461,14 +462,19 @@
                 const inProgressGroup = createSVGElement('g');
                 inProgressGroup.style.pointerEvents = 'none';
 
-                inProgressGroup.appendChild(createSVGElement('line', {
-                    x1: state.currentWireStart.x * state.boardConfig.gridSize,
-                    y1: state.currentWireStart.y * state.boardConfig.gridSize,
-                    x2: state.hoveredGrid.x * state.boardConfig.gridSize,
-                    y2: state.hoveredGrid.y * state.boardConfig.gridSize,
+                const x1 = state.currentWireStart.x * state.boardConfig.gridSize;
+                const y1 = state.currentWireStart.y * state.boardConfig.gridSize;
+                const x2 = state.hoveredGrid.x * state.boardConfig.gridSize;
+                const y2 = state.hoveredGrid.y * state.boardConfig.gridSize;
+                const points = `${x1},${y1} ${x2},${y1} ${x2},${y2}`;
+
+                inProgressGroup.appendChild(createSVGElement('polyline', {
+                    points: points,
                     stroke: state.wireColor,
+                    fill: 'none',
                     'stroke-width': Math.max(2, state.boardConfig.gridSize * 0.15),
                     'stroke-linecap': 'round',
+                    'stroke-linejoin': 'round',
                     opacity: 0.6,
                     'stroke-dasharray': '4,4'
                 }));
@@ -1026,7 +1032,7 @@
         // ========== Event Handlers ==========
         function handleSVGMouseDown(e) {
             // 配線クリックの検出
-            if (e.target.tagName === 'line') {
+            if (e.target.tagName === 'polyline') {
                 const wireGroup = e.target.closest('[data-wire-id]');
                 if (wireGroup) {
                     const wireId = wireGroup.getAttribute('data-wire-id');
@@ -1065,16 +1071,23 @@
             }
 
             if (state.draggedWireEndpoint) {
-                const wire = state.wires.find(w => w.id === state.draggedWireEndpoint.id);
-                if (wire) {
-                    if (state.draggedWireEndpoint.type === 'start') {
-                        wire.startX = x;
-                        wire.startY = y;
-                    } else if (state.draggedWireEndpoint.type === 'end') {
-                        wire.endX = x;
-                        wire.endY = y;
+                // 配線端点の集合を移動（接続されている全端点を更新）
+                const targets = Array.isArray(state.draggedWireEndpoint) 
+                    ? state.draggedWireEndpoint 
+                    : [state.draggedWireEndpoint]; // 互換性のため
+
+                targets.forEach(target => {
+                    const wire = state.wires.find(w => w.id === target.id);
+                    if (wire) {
+                        if (target.type === 'start') {
+                            wire.startX = x;
+                            wire.startY = y;
+                        } else if (target.type === 'end') {
+                            wire.endX = x;
+                            wire.endY = y;
+                        }
                     }
-                }
+                });
                 render();
             } else if (state.draggedComponent) {
                 const newPixelX = (x - state.draggedComponent.offsetX) * state.boardConfig.gridSize;
@@ -1195,7 +1208,26 @@
             e.stopPropagation();
             if (e.button === 2) return;
             state.selectedItem = { type: 'wire', id: wireId };
-            state.draggedWireEndpoint = { id: wireId, type: endpointType };
+            
+            // つかんだワイヤーの端点座標を取得
+            const targetWire = state.wires.find(w => w.id === wireId);
+            if (!targetWire) return;
+            
+            const targetX = endpointType === 'start' ? targetWire.startX : targetWire.endX;
+            const targetY = endpointType === 'start' ? targetWire.startY : targetWire.endY;
+
+            // 同じ座標にある他のワイヤー端点も一緒に移動対象にする
+            const group = [];
+            state.wires.forEach(w => {
+                if (w.startX === targetX && w.startY === targetY) {
+                    group.push({ id: w.id, type: 'start' });
+                }
+                if (w.endX === targetX && w.endY === targetY) {
+                    group.push({ id: w.id, type: 'end' });
+                }
+            });
+            
+            state.draggedWireEndpoint = group;
         }
 
         // ========== State Mutations ==========

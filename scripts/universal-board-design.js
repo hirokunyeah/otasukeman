@@ -308,6 +308,9 @@ export default function UniversalBoardDesigner() {
 
   const [activeSize, setActiveSize] = useState({ width: 0, height: 0 });
   const [draggedComponent, setDraggedComponent] = useState(null);
+  // ワイヤー端点のドラッグ状態。一緒に動かす端点のリスト { id: string, type: 'start'|'end' }[]
+  const [draggedWireEndpoint, setDraggedWireEndpoint] = useState(null);
+  
   const [hoveredGrid, setHoveredGrid] = useState(null);
 
   const svgRef = useRef(null);
@@ -379,7 +382,7 @@ export default function UniversalBoardDesigner() {
   };
 
   const handleMouseDown = (e) => {
-    if (draggedComponent) return;
+    if (draggedComponent || draggedWireEndpoint) return;
     if (e.button === 2) return;
 
     const { x, y } = getGridCoords(e.clientX, e.clientY);
@@ -389,6 +392,7 @@ export default function UniversalBoardDesigner() {
     if (selectedTool === 'wire') {
       setCurrentWireStart({ x, y });
     } else if (selectedTool === 'select') {
+      // 選択ツールで背景クリックした場合、選択解除
       if (e.target.tagName === 'svg' || e.target.id === 'board-bg') {
         setSelectedItem(null);
       }
@@ -411,6 +415,30 @@ export default function UniversalBoardDesigner() {
       setHoveredGrid({ x, y });
     }
 
+    // ワイヤー端点の移動（再配置）
+    if (draggedWireEndpoint) {
+      setWires(prev => prev.map(w => {
+        // 移動対象の端点リストに、このワイヤーが含まれているか確認
+        const targets = draggedWireEndpoint.filter(target => target.id === w.id);
+        
+        if (targets.length === 0) return w;
+
+        let newWire = { ...w };
+        targets.forEach(target => {
+          if (target.type === 'start') {
+            newWire.startX = x;
+            newWire.startY = y;
+          } else {
+            newWire.endX = x;
+            newWire.endY = y;
+          }
+        });
+        return newWire;
+      }));
+      return;
+    }
+
+    // 部品の移動
     if (draggedComponent) {
       // 1. 部品の新しい位置（ピクセル）を計算
       const newPixelX = (x - draggedComponent.offsetX) * boardConfig.gridSize;
@@ -462,6 +490,9 @@ export default function UniversalBoardDesigner() {
     if (draggedComponent) {
       setDraggedComponent(null);
     }
+    if (draggedWireEndpoint) {
+      setDraggedWireEndpoint(null);
+    }
   };
 
   const handleMouseLeave = () => {
@@ -470,9 +501,10 @@ export default function UniversalBoardDesigner() {
 
   const handleRightClick = (e) => {
     e.preventDefault();
-    if (currentWireStart || draggedComponent) {
+    if (currentWireStart || draggedComponent || draggedWireEndpoint) {
       setCurrentWireStart(null);
       setDraggedComponent(null);
+      setDraggedWireEndpoint(null);
     } else {
       selectTool('select');
     }
@@ -564,6 +596,7 @@ export default function UniversalBoardDesigner() {
       if (e.key === 'Escape') {
         selectTool('select');
         setDraggedComponent(null);
+        setDraggedWireEndpoint(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -644,6 +677,35 @@ export default function UniversalBoardDesigner() {
     }
   };
 
+  // ワイヤー端点のドラッグ開始
+  const handleWireEndpointDragStart = (e, id, type) => {
+    e.stopPropagation();
+    if (e.button === 2) return;
+    
+    // 選択ツール時のみ
+    if (selectedTool === 'select') {
+      const targetWire = wires.find(w => w.id === id);
+      if (!targetWire) return;
+
+      // クリックされた端点の座標
+      const targetX = type === 'start' ? targetWire.startX : targetWire.endX;
+      const targetY = type === 'start' ? targetWire.startY : targetWire.endY;
+
+      // 同じ座標にある他のワイヤー端点も一緒に移動対象にする
+      const group = [];
+      wires.forEach(w => {
+        if (w.startX === targetX && w.startY === targetY) {
+          group.push({ id: w.id, type: 'start' });
+        }
+        if (w.endX === targetX && w.endY === targetY) {
+          group.push({ id: w.id, type: 'end' });
+        }
+      });
+      
+      setDraggedWireEndpoint(group);
+    }
+  };
+
   const saveDesign = () => {
     const data = JSON.stringify({ components, wires, boardConfig, componentSizes, showLabels });
     const blob = new Blob([data], { type: 'application/json' });
@@ -691,6 +753,11 @@ export default function UniversalBoardDesigner() {
 
   const currentSelectedComponent = selectedItem?.type === 'component' 
     ? components.find(c => c.id === selectedItem.id) 
+    : null;
+
+  // 選択中のワイヤーを取得（ハンドル表示用）
+  const currentSelectedWire = selectedItem?.type === 'wire'
+    ? wires.find(w => w.id === selectedItem.id)
     : null;
 
   // 基板の総幅（ピクセル）
@@ -1022,33 +1089,49 @@ export default function UniversalBoardDesigner() {
                   </g>
                 )}
 
+                {/* ワイヤー描画レイヤー（ポリライン: L字配線） */}
                 <g className="wires">
                   {wires.map(wire => {
                     const isSelected = selectedItem?.type === 'wire' && selectedItem.id === wire.id;
+                    
+                    // 座標計算
+                    const x1 = wire.startX * boardConfig.gridSize;
+                    const y1 = wire.startY * boardConfig.gridSize;
+                    const x2 = wire.endX * boardConfig.gridSize;
+                    const y2 = wire.endY * boardConfig.gridSize;
+
+                    // マンハッタン配線（L字）: 横移動 -> 縦移動
+                    // points="x1,y1 x2,y1 x2,y2"
+                    const points = `${x1},${y1} ${x2},${y1} ${x2},${y2}`;
+
                     return (
                       <g 
                         key={wire.id} 
                         onClick={(e) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id: wire.id }); }}
                         className="cursor-pointer hover:opacity-80"
                       >
-                        <line 
-                          x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
-                          x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
-                          stroke="transparent" strokeWidth={boardConfig.gridSize/2}
+                        {/* ヒット判定用の太い透明線 */}
+                        <polyline 
+                          points={points}
+                          stroke="transparent" 
+                          fill="none"
+                          strokeWidth={boardConfig.gridSize/2}
                         />
-                        <line 
-                          x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
-                          x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
+                        {/* 実際のワイヤー */}
+                        <polyline 
+                          points={points}
                           stroke={wire.color} 
+                          fill="none"
                           strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
                           strokeLinecap="round"
+                          strokeLinejoin="round"
                           opacity={0.9}
                         />
                         {isSelected && (
-                          <line 
-                            x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
-                            x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
+                          <polyline 
+                            points={points}
                             stroke="white" 
+                            fill="none"
                             strokeWidth={1} 
                             strokeDasharray="2,2" 
                           />
@@ -1057,16 +1140,16 @@ export default function UniversalBoardDesigner() {
                     );
                   })}
 
+                  {/* 作成中のプレビューもL字で表示 */}
                   {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
                     <g className="pointer-events-none">
-                      <line 
-                        x1={currentWireStart.x * boardConfig.gridSize} 
-                        y1={currentWireStart.y * boardConfig.gridSize}
-                        x2={hoveredGrid.x * boardConfig.gridSize} 
-                        y2={hoveredGrid.y * boardConfig.gridSize}
+                      <polyline 
+                        points={`${currentWireStart.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${hoveredGrid.y * boardConfig.gridSize}`}
                         stroke={wireColor} 
+                        fill="none"
                         strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
                         strokeLinecap="round"
+                        strokeLinejoin="round"
                         opacity={0.6}
                         strokeDasharray="4,4"
                       />
@@ -1080,6 +1163,7 @@ export default function UniversalBoardDesigner() {
                   )}
                 </g>
 
+                {/* 部品レイヤー */}
                 <g className="components" style={{ opacity: viewSide === 'back' ? 0.3 : 1 }}>
                   {components.map(comp => {
                     const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
@@ -1149,6 +1233,59 @@ export default function UniversalBoardDesigner() {
                     );
                   })}
                 </g>
+
+                {/* UIオーバーレイレイヤー（ワイヤー操作ハンドルなど） */}
+                {/* 部品よりも手前（後）に描画することでクリックを確実に拾う */}
+                <g className="ui-overlay">
+                  {currentSelectedWire && (
+                    <>
+                      {/* 始点ハンドル */}
+                      <g 
+                        className="cursor-move"
+                        onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')}
+                      >
+                        {/* 透明なヒットエリア（大きめ） */}
+                        <circle
+                          cx={currentSelectedWire.startX * boardConfig.gridSize}
+                          cy={currentSelectedWire.startY * boardConfig.gridSize}
+                          r={boardConfig.gridSize / 2.5}
+                          fill="transparent"
+                        />
+                        {/* 視覚的なハンドル */}
+                        <circle
+                          cx={currentSelectedWire.startX * boardConfig.gridSize}
+                          cy={currentSelectedWire.startY * boardConfig.gridSize}
+                          r={5}
+                          fill="white"
+                          stroke={currentSelectedWire.color}
+                          strokeWidth={2}
+                        />
+                      </g>
+
+                      {/* 終点ハンドル */}
+                      <g 
+                        className="cursor-move"
+                        onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')}
+                      >
+                        <circle
+                          cx={currentSelectedWire.endX * boardConfig.gridSize}
+                          cy={currentSelectedWire.endY * boardConfig.gridSize}
+                          r={boardConfig.gridSize / 2.5}
+                          fill="transparent"
+                        />
+                        <circle
+                          cx={currentSelectedWire.endX * boardConfig.gridSize}
+                          cy={currentSelectedWire.endY * boardConfig.gridSize}
+                          r={5}
+                          fill="white"
+                          stroke={currentSelectedWire.color}
+                          strokeWidth={2}
+                        />
+                      </g>
+                    </>
+                  )}
+                </g>
+
               </g>
 
             </svg>
