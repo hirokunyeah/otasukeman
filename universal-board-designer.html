@@ -30,7 +30,6 @@
         const COMPONENT_PREFIXES = {
             resistor: 'R',
             capacitor: 'C',
-            led: 'D',
             ic_dip: 'U',
             jumper: 'J',
             general: 'P'
@@ -47,12 +46,6 @@
                 id: 'capacitor',
                 name: 'コンデンサ',
                 defaultWidth: 2,
-                defaultHeight: 1
-            },
-            LED: {
-                id: 'led',
-                name: 'LED',
-                defaultWidth: 1,
                 defaultHeight: 1
             },
             IC_DIP: {
@@ -148,8 +141,6 @@
             if (type === 'resistor' || type === 'capacitor') {
                 pins.push({ x: 0, y: 0 });
                 pins.push({ x: width - 1, y: 0 });
-            } else if (type === 'led') {
-                pins.push({ x: 0, y: 0 });
             } else if (type === 'ic_dip') {
                 for (let x = 0; x < width; x++) {
                     pins.push({ x, y: 0 });
@@ -259,33 +250,6 @@
             }));
         }
 
-        function renderLED(g, w, h, gridSize) {
-            const radius = Math.min(w, h) / 2.2;
-            const innerRadius = radius * 0.7;
-            const cx = w / 2;
-            const cy = h / 2;
-
-            g.appendChild(createSVGElement('circle', {
-                cx, cy, r: radius,
-                fill: 'rgba(239, 68, 68, 0.2)', stroke: '#ef4444'
-            }));
-            g.appendChild(createSVGElement('circle', {
-                cx, cy, r: innerRadius, fill: '#ef4444'
-            }));
-            g.appendChild(createSVGElement('line', {
-                x1: cx - 2, y1: cy - innerRadius, x2: cx - 2, y2: cy + innerRadius,
-                stroke: 'white', 'stroke-width': 1
-            }));
-            g.appendChild(createSVGElement('line', {
-                x1: cx + 2, y1: cy, x2: cx + 2, y2: cy + innerRadius,
-                stroke: 'white', 'stroke-width': 1
-            }));
-            g.appendChild(createSVGElement('line', {
-                x1: cx, y1: cy - innerRadius, x2: cx + innerRadius, y2: cy,
-                stroke: 'white', 'stroke-width': 1
-            }));
-        }
-
         function renderICDIP(g, w, h, gridSize, gridW) {
             const topPinCenterY = gridSize / 2;
             const bottomPinCenterY = h - gridSize / 2;
@@ -379,7 +343,6 @@
 
             if (comp.type === 'resistor') renderResistor(g, w, h, gridSize, comp.width);
             else if (comp.type === 'capacitor') renderCapacitor(g, w, h, gridSize);
-            else if (comp.type === 'led') renderLED(g, w, h, gridSize);
             else if (comp.type === 'ic_dip') renderICDIP(g, w, h, gridSize, comp.width);
             else if (comp.type === 'general') renderGeneral(g, w, h, gridSize, comp.width, comp.height);
             else if (comp.type === 'jumper') renderJumper(g, w, h, gridSize, comp.width, comp.height);
@@ -761,7 +724,6 @@
                                 <div class="space-y-1">
                                     ${Object.values(COMPONENT_DEFINITIONS).map(comp => {
                                         const icon = comp.id === 'resistor' ? '🔧' : 
-                                                   comp.id === 'led' ? '💡' : 
                                                    comp.id === 'ic_dip' ? '🔌' : 
                                                    comp.id === 'capacitor' ? '◯' :
                                                    comp.id === 'general' ? '🟪' :

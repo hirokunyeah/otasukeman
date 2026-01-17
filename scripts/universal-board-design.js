@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   Cpu, 
-  Zap, 
   Trash2, 
   Save, 
   FolderOpen, 
@@ -33,7 +32,6 @@ const HOLE_RADIUS = 2;
 const COMPONENT_PREFIXES = {
   resistor: 'R',
   capacitor: 'C',
-  led: 'D',
   ic_dip: 'U',
   jumper: 'J',
   general: 'P' // 汎用部品用
@@ -46,9 +44,6 @@ const getComponentPinOffsets = (type, width, height) => {
     // 左右の端
     pins.push({ x: 0, y: 0 });
     pins.push({ x: width - 1, y: 0 });
-  } else if (type === 'led') {
-    // LEDは1マス
-    pins.push({ x: 0, y: 0 });
   } else if (type === 'ic_dip') {
     // 上下の列
     for (let x = 0; x < width; x++) {
@@ -137,28 +132,6 @@ const COMPONENT_DEFINITIONS = {
           <circle cx={padRight} cy={gridSize/2} r={2} fill="#9ca3af" />
           
           <circle cx={w/2} cy={gridSize/2} r={Math.min(gridSize/2.5, (padRight-padLeft)/2)} fill="#3b82f6" stroke="#1d4ed8" />
-        </g>
-      );
-    }
-  },
-  LED: { 
-    id: 'led', 
-    name: 'LED', 
-    defaultWidth: 1, 
-    defaultHeight: 1, 
-    render: (w, h, gridSize, gridW, gridH) => {
-      const radius = Math.min(w, h) / 2.2;
-      const innerRadius = radius * 0.7;
-      const cx = w/2;
-      const cy = h/2;
-
-      return (
-        <g>
-          <circle cx={cx} cy={cy} r={radius} fill="rgba(239, 68, 68, 0.2)" stroke="#ef4444" />
-          <circle cx={cx} cy={cy} r={innerRadius} fill="#ef4444" />
-          <line x1={cx - 2} y1={cy - innerRadius} x2={cx - 2} y2={cy + innerRadius} stroke="white" strokeWidth="1" />
-          <line x1={cx + 2} y1={cy} x2={cx + 2} y2={cy + innerRadius} stroke="white" strokeWidth="1" />
-          <line x1={cx} y1={cy - innerRadius} x2={cx + innerRadius} y2={cy} stroke="white" strokeWidth="1" />
         </g>
       );
     }
@@ -913,7 +886,6 @@ export default function UniversalBoardDesigner() {
                 >
                   <div className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded border border-gray-200">
                     {comp.id === 'resistor' && <Box size={14} className="text-gray-500" />}
-                    {comp.id === 'led' && <Zap size={14} className="text-red-500" />}
                     {comp.id === 'ic_dip' && <Cpu size={14} className="text-gray-800" />}
                     {comp.id === 'capacitor' && <Box size={14} className="text-blue-500" />}
                     {comp.id === 'general' && <Box size={14} className="text-purple-500" />}
