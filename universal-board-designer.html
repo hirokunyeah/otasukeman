@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>UniBoard Designer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.2s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="app" class="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
+        <!-- 左サイドバー -->
+        <div class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+            <div class="p-4 border-b border-gray-200">
+                <h1 class="text-lg font-bold flex items-center gap-2 text-indigo-600">
+                    <span>📋</span>
+                    UniBoard Designer
+                </h1>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 space-y-6">
+                <!-- 基板設定 -->
+                <div class="bg-gray-50 p-3 rounded border border-gray-200">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">⚙️ 基板設定</h3>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <label class="flex flex-col">
+                            <span class="mb-1 text-gray-600">横穴数</span>
+                            <input 
+                                type="number" 
+                                id="boardWidth"
+                                class="p-1 border rounded"
+                                min="5" max="100"
+                            />
+                        </label>
+                        <label class="flex flex-col">
+                            <span class="mb-1 text-gray-600">縦穴数</span>
+                            <input 
+                                type="number" 
+                                id="boardHeight"
+                                class="p-1 border rounded"
+                                min="5" max="100"
+                            />
+                        </label>
+                        <label class="flex flex-col col-span-2">
+                            <span class="mb-1 text-gray-600">ピッチ (mm)</span>
+                            <input 
+                                type="number" 
+                                id="boardPitch"
+                                class="p-1 border rounded"
+                                step="0.01"
+                                min="0.1"
+                                max="10"
+                            />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 表示設定 -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">👁️ 表示設定</h3>
+                    <button 
+                        id="toggleLabels"
+                        class="flex items-center gap-2 text-sm p-2 hover:bg-gray-50 rounded w-full"
+                    >
+                        <span id="labelToggleIcon">✓</span>
+                        部品ラベルを表示
+                    </button>
+                </div>
+
+                <!-- 基本ツール -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">🛠️ ツール</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button
+                            data-tool="select"
+                            class="tool-btn flex items-center gap-2 p-2 rounded text-sm hover:bg-gray-100"
+                        >
+                            👆 選択・移動
+                        </button>
+                        <button
+                            data-tool="wire"
+                            class="tool-btn flex items-center gap-2 p-2 rounded text-sm hover:bg-gray-100"
+                        >
+                            ⚡ 配線モード
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 選択部品の属性編集 -->
+                <div id="componentPropsPanel" class="bg-indigo-50 p-3 rounded border border-indigo-200 mb-2 animate-fade-in border-l-4 border-l-indigo-500" style="display: none;">
+                    <h3 class="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2">
+                        <span>選択部品: </span><span id="compTypeName"></span>
+                    </h3>
+                    <div class="space-y-2 text-xs">
+                        <label class="block">
+                            <span class="text-gray-600 block mb-1">部品名 (例: R1)</span>
+                            <input 
+                                type="text" 
+                                id="componentName"
+                                class="w-full p-1 border rounded" 
+                            />
+                        </label>
+                        <label class="block">
+                            <span class="text-gray-600 block mb-1">説明 (例: 10kΩ)</span>
+                            <input 
+                                type="text" 
+                                id="componentValue"
+                                class="w-full p-1 border rounded" 
+                            />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 部品サイズ設定 -->
+                <div id="componentSizePanel" class="bg-yellow-50 p-3 rounded border border-yellow-200 mb-2 animate-fade-in" style="display: none;">
+                    <h3 class="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2">
+                        <span>初期サイズ設定</span>
+                        <span id="toolCompName" class="text-yellow-600 normal-case font-normal text-[10px]"></span>
+                    </h3>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <label>
+                            幅（マス）: 
+                            <input 
+                                type="number" 
+                                id="sizeWidth"
+                                min="1" 
+                                max="40" 
+                                class="w-12 p-1 border rounded ml-1" 
+                            />
+                        </label>
+                        <label>
+                            高さ（マス）: 
+                            <input 
+                                type="number" 
+                                id="sizeHeight"
+                                min="1" 
+                                max="40" 
+                                class="w-12 p-1 border rounded ml-1" 
+                            />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 配線色 -->
+                <div id="wireColorPanel" style="display: none;">
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">🎨 配線色</h3>
+                    <div id="colorButtons" class="flex flex-wrap gap-2">
+                    </div>
+                </div>
+
+                <!-- 部品パレット -->
+                <div>
+                    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">📦 部品リスト</h3>
+                    <div id="componentPalette" class="space-y-1">
+                    </div>
+                </div>
+
+                <div class="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1">
+                    <p><strong>Rキー:</strong> 選択部品を回転</p>
+                    <p><strong>Delete:</strong> 選択項目を削除</p>
+                    <p><strong>Esc / 右クリック:</strong> キャンセル</p>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
+                <button id="saveBtn" class="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm">
+                    💾 保存
+                </button>
+                <label class="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm cursor-pointer">
+                    📂 開く
+                    <input type="file" id="loadInput" accept=".json" class="hidden" />
+                </label>
+            </div>
+        </div>
+
+        <!-- メインエリア -->
+        <div class="flex-1 flex flex-col relative bg-gray-200 overflow-hidden">
+            <div class="absolute top-4 left-4 right-4 flex justify-between pointer-events-none z-10">
+                <div class="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto">
+                    <button id="zoomMinus" class="p-2 hover:bg-gray-100 rounded">−</button>
+                    <span id="zoomPercent" class="p-2 text-sm font-mono min-w-[3rem] text-center">150%</span>
+                    <button id="zoomPlus" class="p-2 hover:bg-gray-100 rounded">+</button>
+                </div>
+
+                <div id="selectedToolbar" class="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto animate-fade-in" style="display: none;">
+                    <button id="rotateBtn" class="p-2 hover:bg-gray-100 rounded text-blue-600" title="回転">
+                        🔄
+                    </button>
+                    <button id="deleteBtn" class="p-2 hover:bg-red-50 rounded text-red-600" title="削除">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+
+            <div 
+                id="containerDiv"
+                class="flex-1 overflow-auto flex items-center justify-center p-8 cursor-crosshair"
+            >
+                <div 
+                    id="boardDiv"
+                    class="bg-[#2d7a4d] shadow-2xl relative transition-all duration-300"
+                >
+                    <svg
+                        id="boardSvg"
+                        class="block"
+                    >
+                        <defs>
+                            <pattern id="grid" patternUnits="userSpaceOnUse">
+                                <circle r="1" fill="#e5e7eb" opacity="0.5" />
+                            </pattern>
+                        </defs>
+                        <g id="holes"></g>
+                        <g id="wires"></g>
+                        <g id="components"></g>
+                    </svg>
+                    
+                    <div class="absolute top-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                    <div class="absolute top-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                    <div class="absolute bottom-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                    <div class="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                </div>
+            </div>
+            
+            <div class="bg-white border-t p-2 text-xs text-gray-500 flex justify-between">
+                <span id="gridInfo">Grid: 40x30 (Pitch: 2.54mm)</span>
+                <span id="itemsInfo">Items: 0 components, 0 wires</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== 定数 =====
+        const PIXELS_PER_MM = 8;
+        const DEFAULT_PITCH = 2.54;
+        const DEFAULT_BOARD_WIDTH = 40;
+        const DEFAULT_BOARD_HEIGHT = 30;
+        const DEFAULT_GRID_SIZE = DEFAULT_PITCH * PIXELS_PER_MM;
+        const HOLE_RADIUS = 2;
+
+        const COMPONENT_PREFIXES = {
+            resistor: 'R',
+            capacitor: 'C',
+            led: 'D',
+            ic_dip: 'U',
+            jumper: 'J'
+        };
+
+        const WIRE_COLORS = [
+            { name: '赤', value: '#ef4444' },
+            { name: '黒', value: '#1f2937' },
+            { name: '青', value: '#3b82f6' },
+            { name: '黄', value: '#eab308' },
+            { name: '緑', value: '#22c55e' },
+            { name: '白', value: '#f3f4f6' },
+        ];
+
+        const COMPONENT_DEFINITIONS = {
+            RESISTOR: { 
+                id: 'resistor', 
+                name: '抵抗', 
+                defaultWidth: 3, 
+                defaultHeight: 1,
+            },
+            CAPACITOR: { 
+                id: 'capacitor', 
+                name: 'コンデンサ', 
+                defaultWidth: 2, 
+                defaultHeight: 1,
+            },
+            LED: { 
+                id: 'led', 
+                name: 'LED', 
+                defaultWidth: 1, 
+                defaultHeight: 1,
+            },
+            IC_DIP: { 
+                id: 'ic_dip', 
+                name: 'IC (DIP)', 
+                defaultWidth: 4, 
+                defaultHeight: 4,
+            },
+            JUMPER: {
+                id: 'jumper',
+                name: 'ピンヘッダ',
+                defaultWidth: 4,
+                defaultHeight: 1,
+            }
+        };
+
+        // ===== グローバルステート =====
+        const state = {
+            boardConfig: {
+                width: DEFAULT_BOARD_WIDTH,
+                height: DEFAULT_BOARD_HEIGHT,
+                pitch: DEFAULT_PITCH,
+                gridSize: DEFAULT_GRID_SIZE
+            },
+            components: [],
+            wires: [],
+            selectedTool: 'select',
+            wireColor: WIRE_COLORS[0].value,
+            scale: 1.5,
+            currentWireStart: null,
+            selectedItem: null,
+            showLabels: true,
+            componentSizes: {},
+            activeSize: { width: 0, height: 0 },
+            draggedComponent: null,
+            hoveredGrid: null
+        };
+
+        // 初期化
+        Object.values(COMPONENT_DEFINITIONS).forEach(def => {
+            state.componentSizes[def.id] = { width: def.defaultWidth, height: def.defaultHeight };
+        });
+
+        // ===== DOM要素取得 =====
+        const svg = document.getElementById('boardSvg');
+        const containerDiv = document.getElementById('containerDiv');
+        const boardDiv = document.getElementById('boardDiv');
+        const holesGroup = document.getElementById('holes');
+        const wiresGroup = document.getElementById('wires');
+        const componentsGroup = document.getElementById('components');
+
+        // ===== ユーティリティ関数 =====
+        function generateId() {
+            return Math.random().toString(36).substr(2, 9);
+        }
+
+        function getGridCoords(clientX, clientY) {
+            const rect = svg.getBoundingClientRect();
+            const x = (clientX - rect.left) / state.scale;
+            const y = (clientY - rect.top) / state.scale;
+            return {
+                x: Math.round(x / state.boardConfig.gridSize),
+                y: Math.round(y / state.boardConfig.gridSize),
+            };
+        }
+
+        function createSVGElement(tag, attrs = {}) {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+            Object.entries(attrs).forEach(([key, value]) => {
+                el.setAttribute(key, value);
+            });
+            return el;
+        }
+
+        // ===== コンポーネント描画関数 =====
+        function renderResistor(w, h, gridSize) {
+            const g = createSVGElement('g');
+            const padLeft = gridSize / 2;
+            const padRight = w - gridSize / 2;
+            
+            const innerDist = padRight - padLeft;
+            const bodyWidth = innerDist * 0.6;
+            const leadLen = (innerDist - bodyWidth) / 2;
+            const bodyStart = padLeft + leadLen;
+            const bodyEnd = padRight - leadLen;
+
+            g.appendChild(createSVGElement('line', {
+                x1: padLeft, y1: gridSize/2, x2: bodyStart, y2: gridSize/2, 
+                stroke: '#ccc', 'stroke-width': '2'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx: padLeft, cy: gridSize/2, r: '2', fill: '#9ca3af'
+            }));
+            g.appendChild(createSVGElement('line', {
+                x1: bodyEnd, y1: gridSize/2, x2: padRight, y2: gridSize/2,
+                stroke: '#ccc', 'stroke-width': '2'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx: padRight, cy: gridSize/2, r: '2', fill: '#9ca3af'
+            }));
+            g.appendChild(createSVGElement('rect', {
+                x: bodyStart, y: gridSize/4, width: bodyWidth, height: gridSize/2,
+                fill: '#e5e7eb', stroke: '#4b5563', rx: '3'
+            }));
+
+            return g;
+        }
+
+        function renderCapacitor(w, h, gridSize) {
+            const g = createSVGElement('g');
+            const padLeft = gridSize / 2;
+            const padRight = w - gridSize / 2;
+            const gap = Math.min(gridSize * 0.4, (padRight - padLeft) * 0.4);
+
+            g.appendChild(createSVGElement('line', {
+                x1: padLeft, y1: gridSize/2, x2: w/2 - gap, y2: gridSize/2,
+                stroke: '#ccc', 'stroke-width': '2'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx: padLeft, cy: gridSize/2, r: '2', fill: '#9ca3af'
+            }));
+            g.appendChild(createSVGElement('line', {
+                x1: w/2 + gap, y1: gridSize/2, x2: padRight, y2: gridSize/2,
+                stroke: '#ccc', 'stroke-width': '2'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx: padRight, cy: gridSize/2, r: '2', fill: '#9ca3af'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx: w/2, cy: gridSize/2, r: Math.min(gridSize/2.5, (padRight-padLeft)/2),
+                fill: '#3b82f6', stroke: '#1d4ed8'
+            }));
+
+            return g;
+        }
+
+        function renderLED(w, h, gridSize) {
+            const g = createSVGElement('g');
+            const radius = Math.min(w, h) / 2.2;
+            const innerRadius = radius * 0.7;
+            const cx = w/2, cy = h/2;
+
+            g.appendChild(createSVGElement('circle', {
+                cx, cy, r: radius, fill: 'rgba(239, 68, 68, 0.2)', stroke: '#ef4444'
+            }));
+            g.appendChild(createSVGElement('circle', {
+                cx, cy, r: innerRadius, fill: '#ef4444'
+            }));
+
+            return g;
+        }
+
+        function renderICDIP(w, h, gridSize, gridW) {
+            const g = createSVGElement('g');
+            const padX = Math.min(gridSize / 2, w / 4);
+            const topPinCenterY = gridSize / 2;
+            const bottomPinCenterY = h - gridSize / 2;
+            const pinH = gridSize / 2;
+            const pinW = 4;
+            const bodyX = padX;
+            const bodyY = topPinCenterY + 2;
+            const bodyW = w - padX * 2;
+            const bodyH = (bottomPinCenterY - 2) - bodyY;
+
+            g.appendChild(createSVGElement('rect', {
+                x: bodyX, y: bodyY, width: bodyW, height: bodyH,
+                fill: '#1f2937', rx: '2'
+            }));
+
+            for (let i = 0; i < gridW; i++) {
+                const pinCenterX = gridSize * (i + 0.5);
+                g.appendChild(createSVGElement('rect', {
+                    x: pinCenterX - pinW/2, y: topPinCenterY - pinH/2,
+                    width: pinW, height: pinH, fill: '#9ca3af'
+                }));
+                g.appendChild(createSVGElement('rect', {
+                    x: pinCenterX - pinW/2, y: bottomPinCenterY - pinH/2,
+                    width: pinW, height: pinH, fill: '#9ca3af'
+                }));
+            }
+
+            return g;
+        }
+
+        function renderJumper(w, h, gridSize, gridW, gridH) {
+            const g = createSVGElement('g');
+            for(let y=0; y<gridH; y++) {
+                for(let x=0; x<gridW; x++) {
+                    g.appendChild(createSVGElement('rect', {
+                        x: x * gridSize + 2, y: y * gridSize + 2,
+                        width: gridSize - 4, height: gridSize - 4,
+                        fill: 'gold', stroke: 'orange', 'stroke-width': '1'
+                    }));
+                }
+            }
+            return g;
+        }
+
+        function renderComponent(comp, w, h, gridSize) {
+            if (comp.type === 'resistor') return renderResistor(w, h, gridSize);
+            if (comp.type === 'capacitor') return renderCapacitor(w, h, gridSize);
+            if (comp.type === 'led') return renderLED(w, h, gridSize);
+            if (comp.type === 'ic_dip') return renderICDIP(w, h, gridSize, comp.width);
+            if (comp.type === 'jumper') return renderJumper(w, h, gridSize, comp.width, comp.height);
+            return createSVGElement('g');
+        }
+
+        // ===== イベントハンドラ =====
+        function handleSelectTool(toolId) {
+            state.selectedTool = toolId;
+            state.selectedItem = null;
+            state.currentWireStart = null;
+
+            if (toolId !== 'select' && toolId !== 'wire') {
+                if (state.componentSizes[toolId]) {
+                    state.activeSize = state.componentSizes[toolId];
+                } else {
+                    const def = Object.values(COMPONENT_DEFINITIONS).find(c => c.id === toolId);
+                    if (def) {
+                        state.activeSize = { width: def.defaultWidth, height: def.defaultHeight };
+                    }
+                }
+            }
+
+            render();
+        }
+
+        function handleAddComponent(typeDef, gridX, gridY) {
+            const x = gridX * state.boardConfig.gridSize;
+            const y = gridY * state.boardConfig.gridSize;
+            
+            const prefix = COMPONENT_PREFIXES[typeDef.id] || 'P';
+            const count = state.components.filter(c => c.type === typeDef.id).length + 1;
+            const name = `${prefix}${count}`;
+
+            const newComp = {
+                id: generateId(),
+                type: typeDef.id,
+                x, y,
+                width: state.activeSize.width || typeDef.defaultWidth,
+                height: state.activeSize.height || typeDef.defaultHeight,
+                rotation: 0,
+                name: name,
+                value: ''
+            };
+            state.components.push(newComp);
+            state.selectedItem = { type: 'component', id: newComp.id };
+            render();
+        }
+
+        function handleAddWire(start, end) {
+            const newWire = {
+                id: generateId(),
+                startX: start.x,
+                startY: start.y,
+                endX: end.x,
+                endY: end.y,
+                color: state.wireColor
+            };
+            state.wires.push(newWire);
+            render();
+        }
+
+        function handleDeleteSelected() {
+            if (!state.selectedItem) return;
+            if (state.selectedItem.type === 'component') {
+                state.components = state.components.filter(c => c.id !== state.selectedItem.id);
+            } else if (state.selectedItem.type === 'wire') {
+                state.wires = state.wires.filter(w => w.id !== state.selectedItem.id);
+            }
+            state.selectedItem = null;
+            render();
+        }
+
+        function handleRotateSelected() {
+            if (state.selectedItem?.type !== 'component') return;
+            const comp = state.components.find(c => c.id === state.selectedItem.id);
+            if (comp) {
+                comp.rotation = (comp.rotation + 90) % 360;
+                render();
+            }
+        }
+
+        // ===== レンダリング =====
+        function render() {
+            renderBoardUI();
+            renderSVG();
+        }
+
+        function renderBoardUI() {
+            // ボード設定の反映
+            document.getElementById('boardWidth').value = state.boardConfig.width;
+            document.getElementById('boardHeight').value = state.boardConfig.height;
+            document.getElementById('boardPitch').value = state.boardConfig.pitch;
+
+            // ツールボタンの状態
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                const tool = btn.dataset.tool;
+                if (tool === state.selectedTool) {
+                    btn.classList.add('bg-indigo-100', 'text-indigo-700', 'ring-1', 'ring-indigo-500');
+                } else {
+                    btn.classList.remove('bg-indigo-100', 'text-indigo-700', 'ring-1', 'ring-indigo-500');
+                }
+            });
+
+            // 選択部品のパネル表示
+            const compPropsPanel = document.getElementById('componentPropsPanel');
+            const currentComp = state.selectedItem?.type === 'component' 
+                ? state.components.find(c => c.id === state.selectedItem.id) 
+                : null;
+            if (currentComp) {
+                compPropsPanel.style.display = 'block';
+                document.getElementById('compTypeName').textContent = COMPONENT_DEFINITIONS[currentComp.type.toUpperCase()]?.name || '';
+                document.getElementById('componentName').value = currentComp.name || '';
+                document.getElementById('componentValue').value = currentComp.value || '';
+            } else {
+                compPropsPanel.style.display = 'none';
+            }
+
+            // サイズ設定パネル
+            const sizePanel = document.getElementById('componentSizePanel');
+            if (state.selectedTool !== 'select' && state.selectedTool !== 'wire') {
+                sizePanel.style.display = 'block';
+                document.getElementById('toolCompName').textContent = COMPONENT_DEFINITIONS[state.selectedTool.toUpperCase()]?.name || '';
+                document.getElementById('sizeWidth').value = state.activeSize.width || 0;
+                document.getElementById('sizeHeight').value = state.activeSize.height || 0;
+            } else {
+                sizePanel.style.display = 'none';
+            }
+
+            // 配線色パネル
+            const wirePanel = document.getElementById('wireColorPanel');
+            if (state.selectedTool === 'wire') {
+                wirePanel.style.display = 'block';
+                const colorBtns = document.getElementById('colorButtons');
+                if (!colorBtns.children.length) {
+                    WIRE_COLORS.forEach(color => {
+                        const btn = document.createElement('button');
+                        btn.className = 'w-6 h-6 rounded-full border border-gray-300 shadow-sm';
+                        btn.style.backgroundColor = color.value;
+                        btn.title = color.name;
+                        btn.addEventListener('click', () => {
+                            state.wireColor = color.value;
+                            render();
+                        });
+                        colorBtns.appendChild(btn);
+                    });
+                }
+                // 配線色の選択状態を更新
+                colorBtns.querySelectorAll('button').forEach((btn, idx) => {
+                    if (WIRE_COLORS[idx].value === state.wireColor) {
+                        btn.classList.add('ring-2', 'ring-offset-1', 'ring-indigo-500');
+                    } else {
+                        btn.classList.remove('ring-2', 'ring-offset-1', 'ring-indigo-500');
+                    }
+                });
+            } else {
+                wirePanel.style.display = 'none';
+            }
+
+            // 部品パレットの表示
+            const palette = document.getElementById('componentPalette');
+            if (!palette.children.length) {
+                Object.values(COMPONENT_DEFINITIONS).forEach(comp => {
+                    const btn = document.createElement('button');
+                    btn.className = 'w-full flex items-center gap-3 p-2 rounded text-sm text-left transition-colors hover:bg-gray-50';
+                    btn.innerHTML = `
+                        <div class="w-8 h-8 flex items-center justify-center bg-gray-100 rounded border border-gray-200">
+                            ${comp.id === 'resistor' ? '🔧' : comp.id === 'led' ? '💡' : comp.id === 'ic_dip' ? '🔌' : comp.id === 'capacitor' ? '◯' : '📍'}
+                        </div>
+                        <div class="flex flex-col">
+                            <span>${comp.name}</span>
+                            <span class="text-[10px] text-gray-400">${state.componentSizes[comp.id]?.width || comp.defaultWidth}x${state.componentSizes[comp.id]?.height || comp.defaultHeight}</span>
+                        </div>
+                    `;
+                    btn.addEventListener('click', () => handleSelectTool(comp.id));
+                    palette.appendChild(btn);
+                });
+            }
+
+            // パレットボタンの選択状態
+            palette.querySelectorAll('button').forEach((btn, idx) => {
+                const comp = Object.values(COMPONENT_DEFINITIONS)[idx];
+                if (comp.id === state.selectedTool) {
+                    btn.classList.add('bg-indigo-100', 'text-indigo-700', 'ring-1', 'ring-indigo-500');
+                } else {
+                    btn.classList.remove('bg-indigo-100', 'text-indigo-700', 'ring-1', 'ring-indigo-500');
+                }
+            });
+
+            // 選択ツールバーの表示
+            const toolbar = document.getElementById('selectedToolbar');
+            if (state.selectedItem) {
+                toolbar.style.display = 'flex';
+            } else {
+                toolbar.style.display = 'none';
+            }
+
+            // ズーム表示
+            document.getElementById('zoomPercent').textContent = Math.round(state.scale * 100) + '%';
+
+            // グリッド情報
+            document.getElementById('gridInfo').textContent = `Grid: ${state.boardConfig.width}x${state.boardConfig.height} (Pitch: ${state.boardConfig.pitch}mm)`;
+            document.getElementById('itemsInfo').textContent = `Items: ${state.components.length} components, ${state.wires.length} wires`;
+        }
+
+        function renderSVG() {
+            // SVGサイズ設定
+            const svgWidth = state.boardConfig.width * state.boardConfig.gridSize + state.boardConfig.gridSize;
+            const svgHeight = state.boardConfig.height * state.boardConfig.gridSize + state.boardConfig.gridSize;
+            svg.setAttribute('width', svgWidth);
+            svg.setAttribute('height', svgHeight);
+
+            // グリッドパターン設定
+            const pattern = svg.querySelector('#grid');
+            pattern.setAttribute('width', state.boardConfig.gridSize);
+            pattern.setAttribute('height', state.boardConfig.gridSize);
+            const patternCircle = pattern.querySelector('circle');
+            patternCircle.setAttribute('cx', state.boardConfig.gridSize / 2);
+            patternCircle.setAttribute('cy', state.boardConfig.gridSize / 2);
+
+            // ボードのスケーリング
+            boardDiv.style.transform = `scale(${state.scale})`;
+
+            // 穴の描画
+            holesGroup.innerHTML = '';
+            for (let y = 0; y <= state.boardConfig.height; y++) {
+                for (let x = 0; x <= state.boardConfig.width; x++) {
+                    const circle = createSVGElement('circle', {
+                        cx: x * state.boardConfig.gridSize,
+                        cy: y * state.boardConfig.gridSize,
+                        r: HOLE_RADIUS,
+                        fill: '#1f2937',
+                        opacity: '0.3'
+                    });
+                    holesGroup.appendChild(circle);
+                }
+            }
+
+            // 配線の描画
+            wiresGroup.innerHTML = '';
+            state.wires.forEach(wire => {
+                const isSelected = state.selectedItem?.type === 'wire' && state.selectedItem.id === wire.id;
+                
+                const lineGroup = createSVGElement('g');
+                lineGroup.style.cursor = 'pointer';
+
+                // 透明な太いヒット判定用ライン
+                lineGroup.appendChild(createSVGElement('line', {
+                    x1: wire.startX * state.boardConfig.gridSize,
+                    y1: wire.startY * state.boardConfig.gridSize,
+                    x2: wire.endX * state.boardConfig.gridSize,
+                    y2: wire.endY * state.boardConfig.gridSize,
+                    stroke: 'transparent',
+                    'stroke-width': state.boardConfig.gridSize / 2
+                }));
+
+                // 実際の配線ライン
+                lineGroup.appendChild(createSVGElement('line', {
+                    x1: wire.startX * state.boardConfig.gridSize,
+                    y1: wire.startY * state.boardConfig.gridSize,
+                    x2: wire.endX * state.boardConfig.gridSize,
+                    y2: wire.endY * state.boardConfig.gridSize,
+                    stroke: wire.color,
+                    'stroke-width': Math.max(2, state.boardConfig.gridSize * 0.15),
+                    'stroke-linecap': 'round',
+                    opacity: '0.9'
+                }));
+
+                if (isSelected) {
+                    lineGroup.appendChild(createSVGElement('line', {
+                        x1: wire.startX * state.boardConfig.gridSize,
+                        y1: wire.startY * state.boardConfig.gridSize,
+                        x2: wire.endX * state.boardConfig.gridSize,
+                        y2: wire.endY * state.boardConfig.gridSize,
+                        stroke: 'white',
+                        'stroke-width': '1',
+                        'stroke-dasharray': '2,2'
+                    }));
+                }
+
+                lineGroup.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    state.selectedItem = { type: 'wire', id: wire.id };
+                    render();
+                });
+
+                wiresGroup.appendChild(lineGroup);
+            });
+
+            // 部品の描画
+            componentsGroup.innerHTML = '';
+            state.components.forEach(comp => {
+                const isSelected = state.selectedItem?.type === 'component' && state.selectedItem.id === comp.id;
+                const w = comp.width * state.boardConfig.gridSize;
+                const h = comp.height * state.boardConfig.gridSize;
+                const offsetX = -state.boardConfig.gridSize / 2;
+                const offsetY = -state.boardConfig.gridSize / 2;
+
+                const compGroup = createSVGElement('g', {
+                    transform: `translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${state.boardConfig.gridSize / 2}, ${state.boardConfig.gridSize / 2})`
+                });
+                compGroup.style.cursor = 'move';
+                compGroup.style.filter = isSelected ? 'drop-shadow(0 0 2px white)' : 'none';
+
+                if (isSelected) {
+                    compGroup.appendChild(createSVGElement('rect', {
+                        x: '-2', y: '-2',
+                        width: w + 4, height: h + 4,
+                        fill: 'none', stroke: '#6366f1', 'stroke-width': '1',
+                        'stroke-dasharray': '2,2', rx: '2'
+                    }));
+                }
+
+                compGroup.appendChild(renderComponent(comp, w, h, state.boardConfig.gridSize));
+
+                if (state.showLabels) {
+                    const nameText = createSVGElement('text', {
+                        x: w / 2, y: -5,
+                        'text-anchor': 'middle',
+                        'font-size': state.boardConfig.gridSize * 0.6,
+                        fill: 'white',
+                        'font-weight': 'bold',
+                        'pointer-events': 'none'
+                    });
+                    nameText.textContent = comp.name;
+                    nameText.style.textShadow = '0px 0px 2px rgba(0,0,0,0.8)';
+                    compGroup.appendChild(nameText);
+
+                    const valueText = createSVGElement('text', {
+                        x: w / 2, y: h + state.boardConfig.gridSize * 0.6,
+                        'text-anchor': 'middle',
+                        'font-size': state.boardConfig.gridSize * 0.5,
+                        fill: '#ddd',
+                        'pointer-events': 'none'
+                    });
+                    valueText.textContent = comp.value;
+                    valueText.style.textShadow = '0px 0px 2px rgba(0,0,0,0.8)';
+                    compGroup.appendChild(valueText);
+                }
+
+                compGroup.addEventListener('mousedown', (e) => {
+                    e.stopPropagation();
+                    if (state.selectedTool === 'select') {
+                        const { x, y } = getGridCoords(e.clientX, e.clientY);
+                        state.selectedItem = { type: 'component', id: comp.id };
+                        state.draggedComponent = {
+                            id: comp.id,
+                            offsetX: x - (comp.x / state.boardConfig.gridSize),
+                            offsetY: y - (comp.y / state.boardConfig.gridSize)
+                        };
+                        render();
+                    }
+                });
+
+                componentsGroup.appendChild(compGroup);
+            });
+        }
+
+        // ===== イベントリスナー登録 =====
+        
+        // ボード設定の変更
+        document.getElementById('boardWidth').addEventListener('change', (e) => {
+            state.boardConfig.width = Number(e.target.value);
+            render();
+        });
+        document.getElementById('boardHeight').addEventListener('change', (e) => {
+            state.boardConfig.height = Number(e.target.value);
+            render();
+        });
+        document.getElementById('boardPitch').addEventListener('change', (e) => {
+            const p = Math.max(0.1, Number(e.target.value));
+            state.boardConfig.pitch = p;
+            state.boardConfig.gridSize = p * PIXELS_PER_MM;
+            render();
+        });
+
+        // ラベル表示の切り替え
+        document.getElementById('toggleLabels').addEventListener('click', () => {
+            state.showLabels = !state.showLabels;
+            document.getElementById('labelToggleIcon').textContent = state.showLabels ? '✓' : '✗';
+            render();
+        });
+
+        // ツール選択
+        document.querySelectorAll('.tool-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                handleSelectTool(btn.dataset.tool);
+            });
+        });
+
+        // サイズ設定の変更
+        document.getElementById('sizeWidth').addEventListener('change', (e) => {
+            state.activeSize.width = Math.max(1, Number(e.target.value));
+            if (state.selectedTool !== 'select' && state.selectedTool !== 'wire') {
+                state.componentSizes[state.selectedTool] = { ...state.activeSize };
+            }
+            render();
+        });
+        document.getElementById('sizeHeight').addEventListener('change', (e) => {
+            state.activeSize.height = Math.max(1, Number(e.target.value));
+            if (state.selectedTool !== 'select' && state.selectedTool !== 'wire') {
+                state.componentSizes[state.selectedTool] = { ...state.activeSize };
+            }
+            render();
+        });
+
+        // 部品の属性変更
+        document.getElementById('componentName').addEventListener('change', (e) => {
+            if (state.selectedItem?.type === 'component') {
+                const comp = state.components.find(c => c.id === state.selectedItem.id);
+                if (comp) comp.name = e.target.value;
+                render();
+            }
+        });
+        document.getElementById('componentValue').addEventListener('change', (e) => {
+            if (state.selectedItem?.type === 'component') {
+                const comp = state.components.find(c => c.id === state.selectedItem.id);
+                if (comp) comp.value = e.target.value;
+                render();
+            }
+        });
+
+        // ズーム制御
+        document.getElementById('zoomMinus').addEventListener('click', () => {
+            state.scale = Math.max(0.5, state.scale - 0.1);
+            render();
+        });
+        document.getElementById('zoomPlus').addEventListener('click', () => {
+            state.scale = Math.min(3, state.scale + 0.1);
+            render();
+        });
+
+        // ホイールズーム
+        containerDiv.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = -e.deltaY;
+            const factor = 1.05;
+            state.scale = delta > 0 ? state.scale * factor : state.scale / factor;
+            state.scale = Math.min(Math.max(0.5, state.scale), 5);
+            render();
+        }, { passive: false });
+
+        // マウスイベント
+        svg.addEventListener('mousedown', (e) => {
+            if (state.draggedComponent) return;
+            if (e.button === 2) return;
+
+            const { x, y } = getGridCoords(e.clientX, e.clientY);
+            if (x < 0 || x > state.boardConfig.width || y < 0 || y > state.boardConfig.height) return;
+
+            if (state.selectedTool === 'wire') {
+                state.currentWireStart = { x, y };
+                render();
+            } else if (state.selectedTool === 'select') {
+                if (e.target.tagName === 'svg' || e.target.id === 'board-bg') {
+                    state.selectedItem = null;
+                    render();
+                }
+            } else {
+                const compDef = Object.values(COMPONENT_DEFINITIONS).find(c => c.id === state.selectedTool);
+                if (compDef) {
+                    handleAddComponent({
+                        id: compDef.id,
+                        width: state.activeSize.width || compDef.defaultWidth,
+                        height: state.activeSize.height || compDef.defaultHeight
+                    }, x, y);
+                }
+            }
+        });
+
+        svg.addEventListener('mousemove', (e) => {
+            const { x, y } = getGridCoords(e.clientX, e.clientY);
+            state.hoveredGrid = { x, y };
+
+            if (state.draggedComponent) {
+                const comp = state.components.find(c => c.id === state.draggedComponent.id);
+                if (comp) {
+                    const newX = (x - state.draggedComponent.offsetX) * state.boardConfig.gridSize;
+                    const newY = (y - state.draggedComponent.offsetY) * state.boardConfig.gridSize;
+                    comp.x = newX;
+                    comp.y = newY;
+                    render();
+                }
+            }
+        });
+
+        svg.addEventListener('mouseup', (e) => {
+            if (state.selectedTool === 'wire' && state.currentWireStart) {
+                const { x, y } = getGridCoords(e.clientX, e.clientY);
+                if (x !== state.currentWireStart.x || y !== state.currentWireStart.y) {
+                    handleAddWire(state.currentWireStart, { x, y });
+                }
+                state.currentWireStart = null;
+            }
+            if (state.draggedComponent) {
+                state.draggedComponent = null;
+            }
+        });
+
+        svg.addEventListener('mouseleave', () => {
+            state.hoveredGrid = null;
+        });
+
+        svg.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (state.currentWireStart || state.draggedComponent) {
+                state.currentWireStart = null;
+                state.draggedComponent = null;
+            } else {
+                handleSelectTool('select');
+            }
+            render();
+        });
+
+        // 削除と回転ボタン
+        document.getElementById('rotateBtn').addEventListener('click', handleRotateSelected);
+        document.getElementById('deleteBtn').addEventListener('click', handleDeleteSelected);
+
+        // 保存と読み込み
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const data = JSON.stringify({
+                components: state.components,
+                wires: state.wires,
+                boardConfig: state.boardConfig,
+                componentSizes: state.componentSizes,
+                showLabels: state.showLabels
+            });
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'board-design.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('loadInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const data = JSON.parse(ev.target.result);
+                    if (data.boardConfig) {
+                        const config = { ...data.boardConfig };
+                        if (!config.gridSize && config.pitch) {
+                            config.gridSize = config.pitch * PIXELS_PER_MM;
+                        }
+                        state.boardConfig = config;
+                    }
+                    state.components = data.components || [];
+                    state.wires = data.wires || [];
+                    if (data.componentSizes) {
+                        state.componentSizes = data.componentSizes;
+                    }
+                    if (data.showLabels !== undefined) {
+                        state.showLabels = data.showLabels;
+                    }
+                    render();
+                } catch (err) {
+                    alert('ファイルの読み込みに失敗しました');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        // キーボードショートカット
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                handleDeleteSelected();
+            } else if (e.key === 'r' || e.key === 'R') {
+                handleRotateSelected();
+            } else if (e.key === 'Escape') {
+                handleSelectTool('select');
+                state.draggedComponent = null;
+                render();
+            }
+        });
+
+        // 初期化
+        handleSelectTool('select');
+    </script>
+</body>
+</html>
