@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Board Designer</title>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel (JSX変換用) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* カスタムスクロールバーなどの微調整 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ccc; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #bbb; 
+        }
+        .cursor-crosshair {
+            cursor: crosshair;
+        }
+        /* アニメーション */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 h-screen w-screen overflow-hidden">
+    <div id="root" class="h-full w-full"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useCallback } = React;
+
+        // --- アイコンコンポーネント (Lucide Reactの代わり) ---
+        const Icon = ({ d, size = 16, className = "", ...props }) => (
+            <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width={size} 
+                height={size} 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                className={className} 
+                {...props}
+            >
+                {d}
+            </svg>
+        );
+
+        // 各アイコンのパス定義
+        const Icons = {
+            Grid3X3: <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>,
+            MousePointer2: <><path d="m12 6 2-2 4 4"/><path d="M10 2 2 10"/><path d="M13 6 7 12"/><path d="M12 22 2 12"/><path d="m17 17 4-4"/><path d="m11 11 3 3"/></>,
+            Activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>,
+            Box: <><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22.08V12"/></>,
+            Zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+            Cpu: <><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></>,
+            Trash2: <><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>,
+            RotateCw: <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></>,
+            Settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></>,
+            Type: <><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></>,
+            ToggleLeft: <><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="8" cy="12" r="2"/></>,
+            ToggleRight: <><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></>,
+            Save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>,
+            FolderOpen: <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>,
+            FilePlus: <><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/><path d="M12 18v-6"/></>,
+            Minus: <line x1="5" x2="19" y1="12" y2="12"/>,
+            Plus: <><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></>,
+            Layers: <><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></>,
+            Repeat: <><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></>
+        };
+
+        // --- モーダルコンポーネント ---
+        const Modal = ({ isOpen, type, message, onClose, onConfirm }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
+                    <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4 border border-gray-200">
+                        <div className="mb-4 text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">{message}</div>
+                        <div className="flex justify-end gap-3">
+                            {type === 'confirm' && (
+                                <button 
+                                    onClick={onClose} 
+                                    className="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors"
+                                >
+                                    キャンセル
+                                </button>
+                            )}
+                            <button 
+                                onClick={() => {
+                                    if (type === 'confirm' && onConfirm) onConfirm();
+                                    onClose();
+                                }} 
+                                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium shadow-sm transition-colors"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 初期設定 ---
+        const PIXELS_PER_MM = 8;
+        const DEFAULT_PITCH = 2.54;
+        const DEFAULT_GRID_SIZE = DEFAULT_PITCH * PIXELS_PER_MM;
+        
+        const DEFAULT_BOARD_WIDTH = 40;
+        const DEFAULT_BOARD_HEIGHT = 30;
+        const HOLE_RADIUS = 2;
+
+        const COMPONENT_PREFIXES = {
+            resistor: 'R',
+            capacitor: 'C',
+            ic_dip: 'U',
+            jumper: 'J',
+            general: 'P'
+        };
+
+        const getComponentPinOffsets = (type, width, height) => {
+            const pins = [];
+            if (type === 'resistor' || type === 'capacitor') {
+                pins.push({ x: 0, y: 0 });
+                pins.push({ x: width - 1, y: 0 });
+            } else if (type === 'ic_dip') {
+                for (let x = 0; x < width; x++) {
+                    pins.push({ x, y: 0 });
+                    pins.push({ x, y: height - 1 });
+                }
+            } else if (type === 'jumper' || type === 'general') {
+                for (let x = 0; x < width; x++) {
+                    for (let y = 0; y < height; y++) {
+                        pins.push({ x, y });
+                    }
+                }
+            }
+            return pins;
+        };
+
+        const COMPONENT_DEFINITIONS = {
+            RESISTOR: { 
+                id: 'resistor', 
+                name: '抵抗', 
+                defaultWidth: 3, 
+                defaultHeight: 1, 
+                render: (w, h, gridSize, gridW, gridH) => {
+                    const padLeft = gridSize / 2;
+                    const padRight = w - gridSize / 2;
+                    if (gridW < 2) return null;
+                    const innerDist = padRight - padLeft;
+                    const bodyWidth = innerDist * 0.6;
+                    const leadLen = (innerDist - bodyWidth) / 2;
+                    const bodyStart = padLeft + leadLen;
+                    const bodyEnd = padRight - leadLen;
+                    return (
+                        <g>
+                            <line x1={padLeft} y1={gridSize/2} x2={bodyStart} y2={gridSize/2} stroke="#ccc" strokeWidth="2" />
+                            <circle cx={padLeft} cy={gridSize/2} r={2} fill="#9ca3af" />
+                            <line x1={bodyEnd} y1={gridSize/2} x2={padRight} y2={gridSize/2} stroke="#ccc" strokeWidth="2" />
+                            <circle cx={padRight} cy={gridSize/2} r={2} fill="#9ca3af" />
+                            <rect x={bodyStart} y={gridSize/4} width={bodyWidth} height={gridSize/2} fill="#e5e7eb" stroke="#4b5563" rx="3" />
+                            <line x1={bodyStart + bodyWidth*0.3} y1={gridSize/4} x2={bodyStart + bodyWidth*0.3} y2={gridSize*0.75} stroke="brown" strokeWidth="2" />
+                            <line x1={bodyStart + bodyWidth*0.5} y1={gridSize/4} x2={bodyStart + bodyWidth*0.5} y2={gridSize*0.75} stroke="red" strokeWidth="2" />
+                            <line x1={bodyStart + bodyWidth*0.7} y1={gridSize/4} x2={bodyStart + bodyWidth*0.7} y2={gridSize*0.75} stroke="gold" strokeWidth="2" />
+                        </g>
+                    );
+                }
+            },
+            CAPACITOR: { 
+                id: 'capacitor', 
+                name: 'コンデンサ', 
+                defaultWidth: 2, 
+                defaultHeight: 1, 
+                render: (w, h, gridSize, gridW, gridH) => {
+                    const padLeft = gridSize / 2;
+                    const padRight = w - gridSize / 2;
+                    const gap = Math.min(gridSize * 0.4, (padRight - padLeft) * 0.4);
+                    return (
+                        <g>
+                            <line x1={padLeft} y1={gridSize/2} x2={w/2 - gap} y2={gridSize/2} stroke="#ccc" strokeWidth="2" />
+                            <circle cx={padLeft} cy={gridSize/2} r={2} fill="#9ca3af" />
+                            <line x1={w/2 + gap} y1={gridSize/2} x2={padRight} y2={gridSize/2} stroke="#ccc" strokeWidth="2" />
+                            <circle cx={padRight} cy={gridSize/2} r={2} fill="#9ca3af" />
+                            <circle cx={w/2} cy={gridSize/2} r={Math.min(gridSize/2.5, (padRight-padLeft)/2)} fill="#3b82f6" stroke="#1d4ed8" />
+                        </g>
+                    );
+                }
+            },
+            IC_DIP: { 
+                id: 'ic_dip', 
+                name: 'IC', 
+                defaultWidth: 4, 
+                defaultHeight: 4, 
+                render: (w, h, gridSize, gridW, gridH) => {
+                    const padX = Math.min(gridSize / 2, w / 4);
+                    const padY = Math.min(gridSize / 2, h / 4);
+                    const topPinCenterY = gridSize / 2;
+                    const bottomPinCenterY = h - gridSize / 2;
+                    const pinH = gridSize / 2;
+                    const pinW = 4;
+                    const bodyX = padX;
+                    const bodyY = topPinCenterY + 2; 
+                    const bodyW = w - padX * 2;
+                    const bodyH = (bottomPinCenterY - 2) - bodyY;
+                    const pins = [];
+                    for (let i = 0; i < gridW; i++) {
+                        const pinCenterX = gridSize * (i + 0.5);
+                        pins.push(
+                            <React.Fragment key={i}>
+                                <rect x={pinCenterX - pinW/2} y={topPinCenterY - pinH/2} width={pinW} height={pinH} fill="#9ca3af" />
+                                <circle cx={pinCenterX} cy={topPinCenterY} r={1.5} fill="#6b7280" />
+                                <rect x={pinCenterX - pinW/2} y={bottomPinCenterY - pinH/2} width={pinW} height={pinH} fill="#9ca3af" />
+                                <circle cx={pinCenterX} cy={bottomPinCenterY} r={1.5} fill="#6b7280" />
+                            </React.Fragment>
+                        );
+                    }
+                    return (
+                        <g>
+                            <rect x={bodyX} y={bodyY} width={bodyW} height={bodyH} fill="#1f2937" rx="2" />
+                            <path d={`M ${bodyX} ${h/2 - 5} Q ${bodyX + 5} ${h/2} ${bodyX} ${h/2 + 5}`} fill="#374151" stroke="none" />
+                            {bodyW > 20 && bodyH > 10 && (
+                                <text x={w/2} y={h/2} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="8" style={{ pointerEvents: 'none' }}>IC</text>
+                            )}
+                            {pins}
+                        </g>
+                    );
+                }
+            },
+            GENERAL: {
+                id: 'general',
+                name: '汎用部品',
+                defaultWidth: 3, 
+                defaultHeight: 1,
+                render: (w, h, gridSize, gridW, gridH) => {
+                    const pins = [];
+                    for(let y=0; y<gridH; y++) {
+                        for(let x=0; x<gridW; x++) {
+                            const cx = x * gridSize + gridSize / 2;
+                            const cy = y * gridSize + gridSize / 2;
+                            pins.push(
+                                <circle 
+                                    key={`${x}-${y}`}
+                                    cx={cx} cy={cy} r={3} 
+                                    fill="#9ca3af" stroke="#4b5563" strokeWidth={1}
+                                />
+                            );
+                        }
+                    }
+                    const padding = 2;
+                    return (
+                        <g>
+                            <rect x={padding} y={padding} width={w - padding*2} height={h - padding*2} fill="#8b5cf6" fillOpacity="0.4" stroke="#7c3aed" strokeWidth="2" rx="4" />
+                            {pins}
+                        </g>
+                    );
+                }
+            },
+            JUMPER: {
+                id: 'jumper',
+                name: 'ピンヘッダ',
+                defaultWidth: 4,
+                defaultHeight: 1,
+                render: (w, h, gridSize, gridW, gridH) => {
+                    const pins = [];
+                    for(let y=0; y<gridH; y++) {
+                        for(let x=0; x<gridW; x++) {
+                            pins.push(
+                                <rect 
+                                    key={`${x}-${y}`}
+                                    x={x * gridSize + 2} y={y * gridSize + 2} 
+                                    width={gridSize - 4} height={gridSize - 4} 
+                                    fill="gold" stroke="orange" strokeWidth="1" 
+                                />
+                            );
+                        }
+                    }
+                    return <g>{pins}</g>;
+                }
+            }
+        };
+
+        const WIRE_COLORS = [
+            { name: '赤', value: '#ef4444' },
+            { name: '黒', value: '#1f2937' },
+            { name: '青', value: '#3b82f6' },
+            { name: '黄', value: '#eab308' },
+            { name: '緑', value: '#22c55e' },
+            { name: '白', value: '#f3f4f6' },
+        ];
+
+        // --- メインコンポーネント ---
+        const UniversalBoardDesigner = () => {
+            const [boardConfig, setBoardConfig] = useState({
+                width: DEFAULT_BOARD_WIDTH,
+                height: DEFAULT_BOARD_HEIGHT,
+                pitch: DEFAULT_PITCH,
+                gridSize: DEFAULT_GRID_SIZE
+            });
+
+            const [components, setComponents] = useState([]);
+            const [wires, setWires] = useState([]);
+            const [selectedTool, setSelectedTool] = useState('select');
+            const [wireColor, setWireColor] = useState(WIRE_COLORS[0].value);
+            const [scale, setScale] = useState(1.5);
+            const [currentWireStart, setCurrentWireStart] = useState(null);
+            const [selectedItem, setSelectedItem] = useState(null);
+            const [showLabels, setShowLabels] = useState(true);
+            const [viewSide, setViewSide] = useState('front');
+
+            const [componentSizes, setComponentSizes] = useState(() => {
+                return Object.values(COMPONENT_DEFINITIONS).reduce((acc, def) => {
+                    acc[def.id] = { width: def.defaultWidth, height: def.defaultHeight };
+                    return acc;
+                }, {});
+            });
+
+            const [activeSize, setActiveSize] = useState({ width: 0, height: 0 });
+            const [draggedComponent, setDraggedComponent] = useState(null);
+            const [draggedWireEndpoint, setDraggedWireEndpoint] = useState(null);
+            const [hoveredGrid, setHoveredGrid] = useState(null);
+
+            // モーダル管理 { isOpen, type: 'alert'|'confirm', message, onConfirm }
+            const [modal, setModal] = useState({ isOpen: false, type: null, message: '', onConfirm: null });
+
+            // 画面のオフセット（パンニング用）
+            const [offset, setOffset] = useState({ x: 0, y: 0 });
+            const isRightDragging = useRef(false);
+            const lastPanPos = useRef({ x: 0, y: 0 });
+            const hasPanned = useRef(false);
+
+            const svgRef = useRef(null);
+            const containerRef = useRef(null); 
+
+            // 初期位置を中央に調整する関数
+            const centerBoard = useCallback(() => {
+                if (containerRef.current) {
+                    const containerWidth = containerRef.current.clientWidth;
+                    const containerHeight = containerRef.current.clientHeight;
+                    // デフォルト設定で計算
+                    const boardWidth = DEFAULT_BOARD_WIDTH * DEFAULT_GRID_SIZE + DEFAULT_GRID_SIZE;
+                    const boardHeight = DEFAULT_BOARD_HEIGHT * DEFAULT_GRID_SIZE + DEFAULT_GRID_SIZE;
+                    
+                    setOffset({
+                        x: (containerWidth - boardWidth * 1.5) / 2, // 初期スケール1.5を考慮
+                        y: (containerHeight - boardHeight * 1.5) / 2
+                    });
+                }
+            }, []);
+
+            // 初回マウント時に実行
+            useEffect(() => {
+                centerBoard();
+            }, [centerBoard]);
+
+            // グリッド座標の計算（オフセット考慮）
+            const getGridCoords = (clientX, clientY) => {
+                if (!svgRef.current) return { x: 0, y: 0 };
+                
+                // コンテナの左上からのマウス位置
+                const containerRect = containerRef.current.getBoundingClientRect();
+                const mouseX = clientX - containerRect.left;
+                const mouseY = clientY - containerRect.top;
+
+                // オフセットとスケールを逆算して基板内の座標を求める
+                // (mouseX - offset.x) / scale
+                let x = (mouseX - offset.x) / scale;
+                const y = (mouseY - offset.y) / scale;
+
+                const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
+                if (viewSide === 'back') {
+                    x = totalBoardWidth - x;
+                }
+                return {
+                    x: Math.round(x / boardConfig.gridSize),
+                    y: Math.round(y / boardConfig.gridSize),
+                };
+            };
+
+            const generateId = () => Math.random().toString(36).substr(2, 9);
+
+            const selectTool = (toolId) => {
+                setSelectedTool(toolId);
+                setSelectedItem(null);
+                setCurrentWireStart(null);
+                if (toolId !== 'select' && toolId !== 'wire') {
+                    if (componentSizes[toolId]) {
+                        setActiveSize(componentSizes[toolId]);
+                    } else {
+                        const def = Object.values(COMPONENT_DEFINITIONS).find(c => c.id === toolId);
+                        if (def) setActiveSize({ width: def.defaultWidth, height: def.defaultHeight });
+                    }
+                }
+            };
+
+            const handleSizeChange = (key, value) => {
+                const newVal = Math.max(1, Number(value));
+                const newSize = { ...activeSize, [key]: newVal };
+                setActiveSize(newSize);
+                if (selectedTool !== 'select' && selectedTool !== 'wire') {
+                    setComponentSizes(prev => ({ ...prev, [selectedTool]: newSize }));
+                }
+            };
+
+            const handleAttributeChange = (key, val) => {
+                if (!selectedItem || selectedItem.type !== 'component') return;
+                setComponents(prev => prev.map(c => c.id === selectedItem.id ? { ...c, [key]: val } : c));
+            };
+
+            const handleMouseDown = (e) => {
+                if (e.button === 2) {
+                    handlePanMouseDown(e);
+                    return;
+                }
+
+                if (draggedComponent || draggedWireEndpoint) return;
+                const { x, y } = getGridCoords(e.clientX, e.clientY);
+                if (x < 0 || x > boardConfig.width || y < 0 || y > boardConfig.height) return;
+
+                if (selectedTool === 'wire') {
+                    setCurrentWireStart({ x, y });
+                } else if (selectedTool === 'select') {
+                    if (e.target.tagName === 'svg' || e.target.id === 'board-bg') {
+                        setSelectedItem(null);
+                    }
+                } else {
+                    const compDef = Object.values(COMPONENT_DEFINITIONS).find(c => c.id === selectedTool);
+                    if (compDef) {
+                        addComponent({
+                            id: compDef.id,
+                            width: activeSize.width,
+                            height: activeSize.height
+                        }, x, y);
+                    }
+                }
+            };
+
+            // パンニング（右クリック移動）の開始
+            const handlePanMouseDown = (e) => {
+                e.preventDefault();
+                isRightDragging.current = true;
+                lastPanPos.current = { x: e.clientX, y: e.clientY };
+                hasPanned.current = false;
+            };
+
+            useEffect(() => {
+                const handleWindowMouseMove = (e) => {
+                    // パンニング処理（オフセット更新）
+                    if (isRightDragging.current) {
+                        const dx = e.clientX - lastPanPos.current.x;
+                        const dy = e.clientY - lastPanPos.current.y;
+                        
+                        if (dx !== 0 || dy !== 0) {
+                            hasPanned.current = true;
+                            setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+                            lastPanPos.current = { x: e.clientX, y: e.clientY };
+                        }
+                    }
+                };
+
+                const handleWindowMouseUp = (e) => {
+                    if (isRightDragging.current && e.button === 2) {
+                        isRightDragging.current = false;
+                        if (!hasPanned.current) {
+                            if (currentWireStart || draggedComponent || draggedWireEndpoint) {
+                                setCurrentWireStart(null);
+                                setDraggedComponent(null);
+                                setDraggedWireEndpoint(null);
+                            } else {
+                                selectTool('select');
+                            }
+                        }
+                    }
+                };
+
+                window.addEventListener('mousemove', handleWindowMouseMove);
+                window.addEventListener('mouseup', handleWindowMouseUp);
+                
+                return () => {
+                    window.removeEventListener('mousemove', handleWindowMouseMove);
+                    window.removeEventListener('mouseup', handleWindowMouseUp);
+                };
+            }, [currentWireStart, draggedComponent, draggedWireEndpoint]);
+
+            const handleMouseMove = (e) => {
+                const { x, y } = getGridCoords(e.clientX, e.clientY);
+                if (!hoveredGrid || hoveredGrid.x !== x || hoveredGrid.y !== y) {
+                    setHoveredGrid({ x, y });
+                }
+
+                if (draggedWireEndpoint) {
+                    setWires(prev => prev.map(w => {
+                        const targets = draggedWireEndpoint.filter(target => target.id === w.id);
+                        if (targets.length === 0) return w;
+                        let newWire = { ...w };
+                        targets.forEach(target => {
+                            if (target.type === 'start') {
+                                newWire.startX = x;
+                                newWire.startY = y;
+                            } else {
+                                newWire.endX = x;
+                                newWire.endY = y;
+                            }
+                        });
+                        return newWire;
+                    }));
+                    return;
+                }
+
+                if (draggedComponent) {
+                    const newPixelX = (x - draggedComponent.offsetX) * boardConfig.gridSize;
+                    const newPixelY = (y - draggedComponent.offsetY) * boardConfig.gridSize;
+                    setComponents(prev => prev.map(comp => {
+                        if (comp.id === draggedComponent.id) return { ...comp, x: newPixelX, y: newPixelY };
+                        return comp;
+                    }));
+
+                    const currentGridX = Math.round(newPixelX / boardConfig.gridSize);
+                    const currentGridY = Math.round(newPixelY / boardConfig.gridSize);
+                    const deltaX = currentGridX - draggedComponent.initialGridX;
+                    const deltaY = currentGridY - draggedComponent.initialGridY;
+
+                    if (draggedComponent.connectedWires && draggedComponent.connectedWires.length > 0) {
+                        setWires(prevWires => prevWires.map(w => {
+                            const startConn = draggedComponent.connectedWires.find(cw => cw.id === w.id && cw.type === 'start');
+                            const endConn = draggedComponent.connectedWires.find(cw => cw.id === w.id && cw.type === 'end');
+                            if (!startConn && !endConn) return w;
+                            return {
+                                ...w,
+                                startX: startConn ? startConn.initialX + deltaX : w.startX,
+                                startY: startConn ? startConn.initialY + deltaY : w.startY,
+                                endX: endConn ? endConn.initialX + deltaX : w.endX,
+                                endY: endConn ? endConn.initialY + deltaY : w.endY,
+                            };
+                        }));
+                    }
+                }
+            };
+
+            const handleMouseUp = (e) => {
+                if (selectedTool === 'wire' && currentWireStart) {
+                    const { x, y } = getGridCoords(e.clientX, e.clientY);
+                    if (x !== currentWireStart.x || y !== currentWireStart.y) {
+                        addWire(currentWireStart, { x, y });
+                    }
+                    setCurrentWireStart(null);
+                }
+                setDraggedComponent(null);
+                setDraggedWireEndpoint(null);
+            };
+
+            const handleMouseLeave = () => setHoveredGrid(null);
+
+            const handleRightClick = (e) => {
+                e.preventDefault();
+            };
+
+            useEffect(() => {
+                const container = containerRef.current;
+                if (!container) return;
+                const handleWheel = (e) => {
+                    e.preventDefault();
+                    const delta = -e.deltaY;
+                    setScale(prevScale => {
+                        const factor = 1.05;
+                        const newScale = delta > 0 ? prevScale * factor : prevScale / factor;
+                        return Math.min(Math.max(0.5, newScale), 5);
+                    });
+                };
+                container.addEventListener('wheel', handleWheel, { passive: false });
+                return () => container.removeEventListener('wheel', handleWheel);
+            }, []);
+
+            const addComponent = (typeDef, gridX, gridY) => {
+                const x = gridX * boardConfig.gridSize;
+                const y = gridY * boardConfig.gridSize;
+                const prefix = COMPONENT_PREFIXES[typeDef.id] || 'P';
+                const count = components.filter(c => c.type === typeDef.id).length + 1;
+                const name = `${prefix}${count}`;
+                const newComp = {
+                    id: generateId(), type: typeDef.id, x, y,
+                    width: typeDef.width, height: typeDef.height, rotation: 0,
+                    name: name, value: '',
+                };
+                setComponents([...components, newComp]);
+                setSelectedItem({ type: 'component', id: newComp.id });
+            };
+
+            const addWire = (start, end) => {
+                const newWire = {
+                    id: generateId(), startX: start.x, startY: start.y, endX: end.x, endY: end.y, color: wireColor
+                };
+                setWires([...wires, newWire]);
+            };
+
+            const deleteSelected = useCallback(() => {
+                if (!selectedItem) return;
+                if (selectedItem.type === 'component') {
+                    setComponents(components.filter(c => c.id !== selectedItem.id));
+                } else if (selectedItem.type === 'wire') {
+                    setWires(wires.filter(w => w.id !== selectedItem.id));
+                }
+                setSelectedItem(null);
+            }, [selectedItem, components, wires]);
+
+            const rotateSelected = useCallback(() => {
+                if (selectedItem?.type !== 'component') return;
+                setComponents(components.map(c => {
+                    if (c.id === selectedItem.id) {
+                        return { ...c, rotation: (c.rotation + 90) % 360 };
+                    }
+                    return c;
+                }));
+            }, [selectedItem, components]);
+
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+                    if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
+                    if (e.key === 'r' || e.key === 'R') rotateSelected();
+                    if (e.key === 'Escape') {
+                        selectTool('select');
+                        setDraggedComponent(null);
+                        setDraggedWireEndpoint(null);
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [deleteSelected, rotateSelected]);
+
+            const handleComponentDragStart = (e, id) => {
+                e.stopPropagation();
+                if (e.button === 2) return;
+                if (selectedTool === 'select') {
+                    const { x, y } = getGridCoords(e.clientX, e.clientY);
+                    const comp = components.find(c => c.id === id);
+                    setSelectedItem({ type: 'component', id });
+                    if (comp) {
+                        const pinOffsets = getComponentPinOffsets(comp.type, comp.width, comp.height);
+                        const currentPins = pinOffsets.map(p => {
+                            let rx = p.x;
+                            let ry = p.y;
+                            if (comp.rotation === 90) { rx = -p.y; ry = p.x; }
+                            else if (comp.rotation === 180) { rx = -p.x; ry = -p.y; }
+                            else if (comp.rotation === 270) { rx = p.y; ry = -p.x; }
+                            return {
+                                x: Math.round(comp.x / boardConfig.gridSize) + rx,
+                                y: Math.round(comp.y / boardConfig.gridSize) + ry
+                            };
+                        });
+                        const connectedWires = [];
+                        wires.forEach(wire => {
+                            if (currentPins.some(p => p.x === wire.startX && p.y === wire.startY)) {
+                                connectedWires.push({ id: wire.id, type: 'start', initialX: wire.startX, initialY: wire.startY });
+                            }
+                            if (currentPins.some(p => p.x === wire.endX && p.y === wire.endY)) {
+                                connectedWires.push({ id: wire.id, type: 'end', initialX: wire.endX, initialY: wire.endY });
+                            }
+                        });
+                        setDraggedComponent({
+                            id,
+                            offsetX: x - (comp.x / boardConfig.gridSize),
+                            offsetY: y - (comp.y / boardConfig.gridSize),
+                            initialGridX: Math.round(comp.x / boardConfig.gridSize),
+                            initialGridY: Math.round(comp.y / boardConfig.gridSize),
+                            connectedWires
+                        });
+                    }
+                }
+            };
+
+            const handleWireEndpointDragStart = (e, id, type) => {
+                e.stopPropagation();
+                if (e.button === 2) return;
+                if (selectedTool === 'select') {
+                    const targetWire = wires.find(w => w.id === id);
+                    if (!targetWire) return;
+                    const targetX = type === 'start' ? targetWire.startX : targetWire.endX;
+                    const targetY = type === 'start' ? targetWire.startY : targetWire.endY;
+                    const group = [];
+                    wires.forEach(w => {
+                        if (w.startX === targetX && w.startY === targetY) group.push({ id: w.id, type: 'start' });
+                        if (w.endX === targetX && w.endY === targetY) group.push({ id: w.id, type: 'end' });
+                    });
+                    setDraggedWireEndpoint(group);
+                }
+            };
+
+            // モーダル表示ヘルパー
+            const openAlert = (message) => {
+                setModal({ isOpen: true, type: 'alert', message, onConfirm: null });
+            };
+            const openConfirm = (message, onConfirm) => {
+                setModal({ isOpen: true, type: 'confirm', message, onConfirm });
+            };
+            const closeModal = () => {
+                setModal({ ...modal, isOpen: false });
+            };
+
+            const resetDesign = () => {
+                openConfirm('現在の設計をクリアして新規作成しますか？\n（未保存の内容は失われます）', () => {
+                    // ダイアログが閉じた後に確実に実行
+                    setTimeout(() => {
+                        setComponents([]);
+                        setWires([]);
+                        setBoardConfig({
+                            width: DEFAULT_BOARD_WIDTH,
+                            height: DEFAULT_BOARD_HEIGHT,
+                            pitch: DEFAULT_PITCH,
+                            gridSize: DEFAULT_GRID_SIZE
+                        });
+                        setScale(1.5);
+                        setViewSide('front');
+                        centerBoard();
+                        setSelectedTool('select');
+                        setSelectedItem(null);
+                        setWireColor(WIRE_COLORS[0].value);
+                        setDraggedComponent(null);
+                        setDraggedWireEndpoint(null);
+                        setCurrentWireStart(null);
+                        
+                        setComponentSizes(Object.values(COMPONENT_DEFINITIONS).reduce((acc, def) => {
+                            acc[def.id] = { width: def.defaultWidth, height: def.defaultHeight };
+                            return acc;
+                        }, {}));
+                    }, 10);
+                });
+            };
+
+            const saveDesign = () => {
+                const data = JSON.stringify({ components, wires, boardConfig, componentSizes, showLabels });
+                const blob = new Blob([data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'board-design.json';
+                a.click();
+            };
+
+            const loadDesign = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        if (data.boardConfig) {
+                            const loadedConfig = { ...data.boardConfig };
+                            if (!loadedConfig.pitch && loadedConfig.gridSize) {
+                                loadedConfig.pitch = Math.round((loadedConfig.gridSize / PIXELS_PER_MM) * 100) / 100;
+                            }
+                            if (loadedConfig.pitch && !loadedConfig.gridSize) {
+                                loadedConfig.gridSize = loadedConfig.pitch * PIXELS_PER_MM;
+                            }
+                            setBoardConfig(loadedConfig);
+                        }
+                        setComponents(data.components || []);
+                        setWires(data.wires || []);
+                        if (data.componentSizes) {
+                            setComponentSizes(data.componentSizes);
+                            if (selectedTool !== 'select' && selectedTool !== 'wire' && data.componentSizes[selectedTool]) {
+                                setActiveSize(data.componentSizes[selectedTool]);
+                            }
+                        }
+                        if (data.showLabels !== undefined) setShowLabels(data.showLabels);
+                    } catch (err) {
+                        openAlert('ファイルの読み込みに失敗しました');
+                    }
+                };
+                reader.readAsText(file);
+            };
+
+            const renderGridHoles = () => {
+                const holes = [];
+                for (let y = 0; y <= boardConfig.height; y++) {
+                    for (let x = 0; x <= boardConfig.width; x++) {
+                        holes.push(
+                            <circle key={`${x}-${y}`} cx={x * boardConfig.gridSize} cy={y * boardConfig.gridSize} r={HOLE_RADIUS} fill="#1f2937" opacity={0.3} style={{ pointerEvents: 'none' }} />
+                        );
+                    }
+                }
+                return holes;
+            };
+
+            const currentSelectedComponent = selectedItem?.type === 'component' ? components.find(c => c.id === selectedItem.id) : null;
+            const currentSelectedWire = selectedItem?.type === 'wire' ? wires.find(w => w.id === selectedItem.id) : null;
+            const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
+
+            return (
+                <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
+                    {/* 左サイドバー */}
+                    <div className="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+                        <div className="p-4 border-b border-gray-200">
+                            <h1 className="text-lg font-bold flex items-center gap-2 text-indigo-600">
+                                <Icon d={Icons.Grid3X3} size={20} />
+                                UniBoard Designer
+                            </h1>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                            {/* 基板設定 */}
+                            <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <Icon d={Icons.Settings} size={12} /> 基板設定
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">横穴数</span><input type="number" value={boardConfig.width} onChange={(e) => setBoardConfig({...boardConfig, width: Number(e.target.value)})} className="p-1 border rounded" min="5" max="100"/></label>
+                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">縦穴数</span><input type="number" value={boardConfig.height} onChange={(e) => setBoardConfig({...boardConfig, height: Number(e.target.value)})} className="p-1 border rounded" min="5" max="100"/></label>
+                                    <label className="flex flex-col col-span-2"><span className="mb-1 text-gray-600">ピッチ (mm)</span><input type="number" value={boardConfig.pitch} onChange={(e) => { const p = Math.max(0.1, Number(e.target.value)); setBoardConfig({...boardConfig, pitch: p, gridSize: p * PIXELS_PER_MM}); }} className="p-1 border rounded" step="0.01" min="0.1" max="10"/></label>
+                                </div>
+                            </div>
+                            {/* 表示設定 */}
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1"><Icon d={Icons.Type} size={12} /> 表示設定</h3>
+                                <div className="space-y-2">
+                                    <button onClick={() => setShowLabels(!showLabels)} className="flex items-center gap-2 text-sm p-2 hover:bg-gray-50 rounded w-full border border-transparent hover:border-gray-200">
+                                        {showLabels ? <Icon d={Icons.ToggleRight} className="text-indigo-600" /> : <Icon d={Icons.ToggleLeft} className="text-gray-400" />} 部品ラベルを表示
+                                    </button>
+                                </div>
+                            </div>
+                            {/* 基本ツール */}
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">ツール</h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => selectTool('select')} className={`flex items-center gap-2 p-2 rounded text-sm ${selectedTool === 'select' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-100'}`}><Icon d={Icons.MousePointer2} size={16} /> 選択・移動</button>
+                                    <button onClick={() => selectTool('wire')} className={`flex items-center gap-2 p-2 rounded text-sm ${selectedTool === 'wire' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-100'}`}><Icon d={Icons.Activity} size={16} /> 配線モード</button>
+                                </div>
+                            </div>
+                            {/* 選択部品属性 */}
+                            {currentSelectedComponent && (
+                                <div className="bg-indigo-50 p-3 rounded border border-indigo-200 mb-2 animate-fade-in border-l-4 border-l-indigo-500">
+                                    <h3 className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2 flex justify-between"><span>選択部品: {COMPONENT_DEFINITIONS[currentSelectedComponent.type.toUpperCase()]?.name}</span></h3>
+                                    <div className="space-y-2 text-xs">
+                                        <label className="block"><span className="text-gray-600 block mb-1">部品名 (例: R1)</span><input type="text" value={currentSelectedComponent.name || ''} onChange={e => handleAttributeChange('name', e.target.value)} className="w-full p-1 border rounded" /></label>
+                                        <label className="block"><span className="text-gray-600 block mb-1">説明 (例: 10kΩ)</span><input type="text" value={currentSelectedComponent.value || ''} onChange={e => handleAttributeChange('value', e.target.value)} className="w-full p-1 border rounded" /></label>
+                                    </div>
+                                </div>
+                            )}
+                            {/* 部品サイズ */}
+                            {selectedTool !== 'select' && selectedTool !== 'wire' && (
+                                <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mb-2 animate-fade-in">
+                                    <h3 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2 flex justify-between"><span>初期サイズ設定</span><span className="text-yellow-600 normal-case font-normal text-[10px]">{COMPONENT_DEFINITIONS[selectedTool.toUpperCase()]?.name}</span></h3>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                        <label>幅（マス）: <input type="number" min="1" max="40" value={activeSize.width} onChange={e => handleSizeChange('width', e.target.value)} className="w-12 p-1 border rounded ml-1" /></label>
+                                        <label>高さ（マス）: <input type="number" min="1" max="40" value={activeSize.height} onChange={e => handleSizeChange('height', e.target.value)} className="w-12 p-1 border rounded ml-1" /></label>
+                                    </div>
+                                </div>
+                            )}
+                            {/* 配線色 */}
+                            {selectedTool === 'wire' && (
+                                <div className="animate-fade-in"><h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">配線色</h3><div className="flex flex-wrap gap-2">{WIRE_COLORS.map(c => (<button key={c.name} onClick={() => setWireColor(c.value)} className={`w-6 h-6 rounded-full border border-gray-300 shadow-sm ${wireColor === c.value ? 'ring-2 ring-offset-1 ring-indigo-500' : ''}`} style={{ backgroundColor: c.value }} title={c.name}/>))}</div></div>
+                            )}
+                            {/* 部品リスト */}
+                            <div>
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">部品リスト</h3>
+                                <div className="space-y-1">
+                                    {Object.values(COMPONENT_DEFINITIONS).map(comp => (
+                                        <button key={comp.id} onClick={() => selectTool(comp.id)} className={`w-full flex items-center gap-3 p-2 rounded text-sm text-left transition-colors ${selectedTool === comp.id ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-50'}`}>
+                                            <div className="w-8 h-8 flex items-center justify-center bg-gray-100 rounded border border-gray-200">
+                                                {comp.id === 'resistor' && <Icon d={Icons.Box} size={14} className="text-gray-500" />}
+                                                {comp.id === 'ic_dip' && <Icon d={Icons.Cpu} size={14} className="text-gray-800" />}
+                                                {comp.id === 'capacitor' && <Icon d={Icons.Box} size={14} className="text-blue-500" />}
+                                                {comp.id === 'general' && <Icon d={Icons.Box} size={14} className="text-purple-500" />}
+                                                {comp.id === 'jumper' && <div className="flex gap-0.5"><div className="w-1.5 h-1.5 bg-yellow-500 rounded-full" /><div className="w-1.5 h-1.5 bg-yellow-500 rounded-full" /></div>}
+                                            </div>
+                                            <div className="flex flex-col"><span>{comp.name}</span><span className="text-[10px] text-gray-400">{componentSizes[comp.id] ? `${componentSizes[comp.id].width}x${componentSizes[comp.id].height}` : `${comp.defaultWidth}x${comp.defaultHeight}`}</span></div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p></div>
+                        </div>
+                        <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
+                            <button onClick={resetDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="新規作成"><Icon d={Icons.FilePlus} size={16} /> 新規</button>
+                            <button onClick={saveDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="保存"><Icon d={Icons.Save} size={16} /> 保存</button>
+                            <label className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm cursor-pointer" title="開く"><Icon d={Icons.FolderOpen} size={16} /> 開く<input type="file" accept=".json" onChange={loadDesign} className="hidden" /></label>
+                        </div>
+                    </div>
+
+                    {/* メインエリア */}
+                    <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden">
+                        <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none z-10">
+                            <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto">
+                                <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))} className="p-2 hover:bg-gray-100 rounded"><Icon d={Icons.Minus} size={16} /></button>
+                                <span className="p-2 text-sm font-mono min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
+                                <button onClick={() => setScale(s => Math.min(3, s + 0.1))} className="p-2 hover:bg-gray-100 rounded"><Icon d={Icons.Plus} size={16} /></button>
+                            </div>
+                            <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex pointer-events-auto">
+                                <button onClick={() => setViewSide('front')} className={`flex items-center gap-1 px-3 py-1 rounded text-sm ${viewSide === 'front' ? 'bg-indigo-100 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}><Icon d={Icons.Layers} size={14} /> 表面</button>
+                                <button onClick={() => setViewSide('back')} className={`flex items-center gap-1 px-3 py-1 rounded text-sm ${viewSide === 'back' ? 'bg-indigo-100 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}><Icon d={Icons.Repeat} size={14} /> 裏面</button>
+                            </div>
+                            {selectedItem && (
+                                <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto animate-fade-in">
+                                    {selectedItem.type === 'component' && <button onClick={rotateSelected} className="p-2 hover:bg-gray-100 rounded text-blue-600" title="回転"><Icon d={Icons.RotateCw} size={16} /></button>}
+                                    <button onClick={deleteSelected} className="p-2 hover:bg-red-50 rounded text-red-600" title="削除"><Icon d={Icons.Trash2} size={16} /></button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 修正箇所：flex中央揃えを削除し、相対配置に変更 */}
+                        <div ref={containerRef} className="flex-1 overflow-hidden p-0 cursor-crosshair bg-gray-200 relative" onMouseDown={(e) => { if(e.button === 2) { handlePanMouseDown(e); return; } if(e.target === e.currentTarget) setSelectedItem(null); }} onContextMenu={handleRightClick}>
+                            <div style={{ 
+                                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, 
+                                transformOrigin: '0 0',
+                                transition: isRightDragging.current ? 'none' : 'transform 0.1s ease-out'
+                            }} className="bg-[#2d7a4d] shadow-2xl absolute left-0 top-0">
+                                <svg ref={svgRef} width={totalBoardWidth} height={boardConfig.height * boardConfig.gridSize + boardConfig.gridSize} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} id="board-bg" className="block">
+                                    <defs>
+                                        <pattern id="grid" width={boardConfig.gridSize} height={boardConfig.gridSize} patternUnits="userSpaceOnUse"><circle cx={boardConfig.gridSize/2} cy={boardConfig.gridSize/2} r={1} fill="#e5e7eb" opacity="0.5" /></pattern>
+                                    </defs>
+                                    <g transform={viewSide === 'back' ? `scale(-1, 1) translate(-${totalBoardWidth}, 0)` : ''}>
+                                        <g>{renderGridHoles()}</g>
+                                        
+                                        {selectedTool === 'wire' && hoveredGrid && (
+                                            <g className="pointer-events-none">
+                                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill={wireColor} opacity={0.3} />
+                                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={2} fill="white" />
+                                            </g>
+                                        )}
+
+                                        <g className="wires">
+                                            {wires.map(wire => {
+                                                const isSelected = selectedItem?.type === 'wire' && selectedItem.id === wire.id;
+                                                const x1 = wire.startX * boardConfig.gridSize;
+                                                const y1 = wire.startY * boardConfig.gridSize;
+                                                const x2 = wire.endX * boardConfig.gridSize;
+                                                const y2 = wire.endY * boardConfig.gridSize;
+                                                const points = `${x1},${y1} ${x2},${y1} ${x2},${y2}`;
+                                                return (
+                                                    <g key={wire.id} onClick={(e) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id: wire.id }); }} className="cursor-pointer hover:opacity-80">
+                                                        <polyline points={points} stroke="transparent" fill="none" strokeWidth={boardConfig.gridSize/2} />
+                                                        <polyline points={points} stroke={wire.color} fill="none" strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} strokeLinecap="round" strokeLinejoin="round" opacity={0.9} />
+                                                        {isSelected && <polyline points={points} stroke="white" fill="none" strokeWidth={1} strokeDasharray="2,2" />}
+                                                    </g>
+                                                );
+                                            })}
+                                            {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
+                                                <g className="pointer-events-none">
+                                                    <polyline points={`${currentWireStart.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${hoveredGrid.y * boardConfig.gridSize}`} stroke={wireColor} fill="none" strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} strokeLinecap="round" strokeLinejoin="round" opacity={0.6} strokeDasharray="4,4" />
+                                                    <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={wireColor} />
+                                                </g>
+                                            )}
+                                        </g>
+
+                                        <g className="components" style={{ opacity: viewSide === 'back' ? 0.3 : 1 }}>
+                                            {components.map(comp => {
+                                                const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
+                                                const isSelected = selectedItem?.type === 'component' && selectedItem.id === comp.id;
+                                                const offsetX = -boardConfig.gridSize / 2;
+                                                const offsetY = -boardConfig.gridSize / 2;
+                                                const w = comp.width * boardConfig.gridSize;
+                                                const h = comp.height * boardConfig.gridSize;
+                                                const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
+                                                return (
+                                                    <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => handleComponentDragStart(e, comp.id)} className="cursor-move" style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none' }}>
+                                                        {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
+                                                        {def.render(w, h, boardConfig.gridSize, comp.width, comp.height)}
+                                                        {showLabels && (
+                                                            <g transform={`rotate(${-comp.rotation}, ${w/2}, ${h/2})`}> 
+                                                                <g transform={`translate(${w/2}, 0)`}>
+                                                                    <g transform={labelTransform}>
+                                                                        <text x={0} y={-5} textAnchor="middle" fontSize={boardConfig.gridSize * 0.6} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}>{comp.name}</text>
+                                                                        <text x={0} y={h + boardConfig.gridSize * 0.6} textAnchor="middle" fontSize={boardConfig.gridSize * 0.5} fill="#ddd" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}>{comp.value}</text>
+                                                                    </g>
+                                                                </g>
+                                                            </g>
+                                                        )}
+                                                    </g>
+                                                );
+                                            })}
+                                        </g>
+
+                                        {/* 最前面UI（ワイヤー端点ハンドル） */}
+                                        <g className="ui-overlay">
+                                            {currentSelectedWire && (
+                                                <>
+                                                    <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')}>
+                                                        <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
+                                                        <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
+                                                    </g>
+                                                    <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')}>
+                                                        <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
+                                                        <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
+                                                    </g>
+                                                </>
+                                            )}
+                                        </g>
+                                    </g>
+                                </svg>
+                                <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                                <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                                <div className="absolute bottom-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                                <div className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* モーダル */}
+                    <Modal 
+                        isOpen={modal.isOpen} 
+                        type={modal.type} 
+                        message={modal.message} 
+                        onClose={closeModal} 
+                        onConfirm={modal.onConfirm} 
+                    />
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<UniversalBoardDesigner />);
+    </script>
+</body>
+</html>
