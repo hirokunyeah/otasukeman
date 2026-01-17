@@ -73,6 +73,20 @@
                         <span id="labelToggleIcon">✓</span>
                         部品ラベルを表示
                     </button>
+                    <div class="flex gap-1 mt-2">
+                        <button 
+                            id="viewFrontBtn"
+                            class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-sm bg-indigo-100 text-indigo-700 font-bold"
+                        >
+                            📄 表面
+                        </button>
+                        <button 
+                            id="viewBackBtn"
+                            class="flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded text-sm text-gray-600 hover:bg-gray-100"
+                        >
+                            🔄 裏面
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 基本ツール -->
@@ -311,6 +325,7 @@
             currentWireStart: null,
             selectedItem: null,
             showLabels: true,
+            viewSide: 'front',
             componentSizes: {},
             activeSize: { width: 0, height: 0 },
             draggedComponent: null,
@@ -337,8 +352,15 @@
 
         function getGridCoords(clientX, clientY) {
             const rect = svg.getBoundingClientRect();
-            const x = (clientX - rect.left) / state.scale;
+            let x = (clientX - rect.left) / state.scale;
             const y = (clientY - rect.top) / state.scale;
+            
+            // 裏面の場合はX座標を反転させる
+            if (state.viewSide === 'back') {
+                const totalBoardWidth = state.boardConfig.width * state.boardConfig.gridSize + state.boardConfig.gridSize;
+                x = totalBoardWidth - x;
+            }
+            
             return {
                 x: Math.round(x / state.boardConfig.gridSize),
                 y: Math.round(y / state.boardConfig.gridSize),
@@ -574,6 +596,21 @@
             document.getElementById('boardHeight').value = state.boardConfig.height;
             document.getElementById('boardPitch').value = state.boardConfig.pitch;
 
+            // 表/裏面ボタンの状態更新
+            const viewFrontBtn = document.getElementById('viewFrontBtn');
+            const viewBackBtn = document.getElementById('viewBackBtn');
+            if (state.viewSide === 'front') {
+                viewFrontBtn.classList.add('bg-indigo-100', 'text-indigo-700', 'font-bold');
+                viewFrontBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+                viewBackBtn.classList.remove('bg-indigo-100', 'text-indigo-700', 'font-bold');
+                viewBackBtn.classList.add('text-gray-600', 'hover:bg-gray-100');
+            } else {
+                viewFrontBtn.classList.remove('bg-indigo-100', 'text-indigo-700', 'font-bold');
+                viewFrontBtn.classList.add('text-gray-600', 'hover:bg-gray-100');
+                viewBackBtn.classList.add('bg-indigo-100', 'text-indigo-700', 'font-bold');
+                viewBackBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+            }
+
             // ツールボタンの状態
             document.querySelectorAll('.tool-btn').forEach(btn => {
                 const tool = btn.dataset.tool;
@@ -702,6 +739,19 @@
 
             // ボードのスケーリング
             boardDiv.style.transform = `scale(${state.scale})`;
+
+            // 裏面時の変換を適用
+            if (state.viewSide === 'back') {
+                holesGroup.setAttribute('transform', `scale(-1, 1) translate(-${svgWidth}, 0)`);
+                wiresGroup.setAttribute('transform', `scale(-1, 1) translate(-${svgWidth}, 0)`);
+                componentsGroup.setAttribute('transform', `scale(-1, 1) translate(-${svgWidth}, 0)`);
+                componentsGroup.style.opacity = '0.3';
+            } else {
+                holesGroup.setAttribute('transform', '');
+                wiresGroup.setAttribute('transform', '');
+                componentsGroup.setAttribute('transform', '');
+                componentsGroup.style.opacity = '1';
+            }
 
             // 穴の描画
             holesGroup.innerHTML = '';
@@ -860,6 +910,19 @@
         document.getElementById('toggleLabels').addEventListener('click', () => {
             state.showLabels = !state.showLabels;
             document.getElementById('labelToggleIcon').textContent = state.showLabels ? '✓' : '✗';
+            render();
+        });
+
+        // 表/裏面の切り替え
+        document.getElementById('viewFrontBtn').addEventListener('click', () => {
+            state.viewSide = 'front';
+            state.selectedItem = null;
+            render();
+        });
+
+        document.getElementById('viewBackBtn').addEventListener('click', () => {
+            state.viewSide = 'back';
+            state.selectedItem = null;
             render();
         });
 

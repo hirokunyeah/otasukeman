@@ -15,7 +15,9 @@ import {
   Box,
   Type,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  Repeat, // 反転アイコン用
+  Layers  // 面切り替え用アイコン
 } from 'lucide-react';
 
 // --- 初期設定 ---
@@ -246,6 +248,9 @@ export default function UniversalBoardDesigner() {
   
   // ラベル表示フラグ
   const [showLabels, setShowLabels] = useState(true);
+  
+  // ビューの面（'front' | 'back'）
+  const [viewSide, setViewSide] = useState('front');
 
   // 各部品ごとの設定サイズを保持するステート
   const [componentSizes, setComponentSizes] = useState(() => {
@@ -262,11 +267,25 @@ export default function UniversalBoardDesigner() {
   const svgRef = useRef(null);
   const containerRef = useRef(null); 
 
+  // グリッド座標の計算（表/裏を考慮）
   const getGridCoords = (clientX, clientY) => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const rect = svgRef.current.getBoundingClientRect();
-    const x = (clientX - rect.left) / scale;
+    
+    // 画面上の相対座標
+    let x = (clientX - rect.left) / scale;
     const y = (clientY - rect.top) / scale;
+
+    // 裏面の場合はX座標を反転させる（基板の右端が画面の左端になる）
+    // 基板全体の幅（ピクセル）
+    const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
+    
+    if (viewSide === 'back') {
+      // 座標反転: 全幅 - 現在のX
+      // SVGのtransformで原点が移動しているので、クリック位置の解釈を逆にする
+      x = totalBoardWidth - x;
+    }
+
     return {
       x: Math.round(x / boardConfig.gridSize),
       y: Math.round(y / boardConfig.gridSize),
@@ -306,7 +325,6 @@ export default function UniversalBoardDesigner() {
     }
   };
 
-  // 部品の属性（名前・値）変更
   const handleAttributeChange = (key, val) => {
     if (!selectedItem || selectedItem.type !== 'component') return;
     setComponents(prev => prev.map(c => 
@@ -413,7 +431,6 @@ export default function UniversalBoardDesigner() {
     
     // 自動命名: プレフィックス + 連番
     const prefix = COMPONENT_PREFIXES[typeDef.id] || 'P';
-    // 既存の同タイプ部品数 + 1 を番号とする（簡易実装）
     const count = components.filter(c => c.type === typeDef.id).length + 1;
     const name = `${prefix}${count}`;
 
@@ -426,7 +443,7 @@ export default function UniversalBoardDesigner() {
       height: typeDef.height,
       rotation: 0,
       name: name,
-      value: '', // 説明の初期値
+      value: '', 
     };
     setComponents([...components, newComp]);
     setSelectedItem({ type: 'component', id: newComp.id });
@@ -466,7 +483,6 @@ export default function UniversalBoardDesigner() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // 入力フォームでのDeleteキー誤爆防止
       if (e.target.tagName === 'INPUT') return;
 
       if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
@@ -565,10 +581,12 @@ export default function UniversalBoardDesigner() {
     reader.readAsText(file);
   };
 
-  // 選択中の部品を取得
   const currentSelectedComponent = selectedItem?.type === 'component' 
     ? components.find(c => c.id === selectedItem.id) 
     : null;
+
+  // 基板の総幅（ピクセル）
+  const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
@@ -637,13 +655,15 @@ export default function UniversalBoardDesigner() {
             <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
               <Type size={12} /> 表示設定
             </h3>
-            <button 
-              onClick={() => setShowLabels(!showLabels)}
-              className="flex items-center gap-2 text-sm p-2 hover:bg-gray-50 rounded w-full"
-            >
-              {showLabels ? <ToggleRight className="text-indigo-600" /> : <ToggleLeft className="text-gray-400" />}
-              部品ラベルを表示
-            </button>
+            <div className="space-y-2">
+                <button 
+                  onClick={() => setShowLabels(!showLabels)}
+                  className="flex items-center gap-2 text-sm p-2 hover:bg-gray-50 rounded w-full border border-transparent hover:border-gray-200"
+                >
+                  {showLabels ? <ToggleRight className="text-indigo-600" /> : <ToggleLeft className="text-gray-400" />}
+                  部品ラベルを表示
+                </button>
+            </div>
           </div>
 
           {/* 基本ツール */}
@@ -665,7 +685,7 @@ export default function UniversalBoardDesigner() {
             </div>
           </div>
 
-          {/* 選択部品の属性編集（最優先） */}
+          {/* 選択部品の属性編集 */}
           {currentSelectedComponent && (
             <div className="bg-indigo-50 p-3 rounded border border-indigo-200 mb-2 animate-fade-in border-l-4 border-l-indigo-500">
               <h3 className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2 flex justify-between">
@@ -694,7 +714,7 @@ export default function UniversalBoardDesigner() {
             </div>
           )}
 
-          {/* 部品サイズ設定（ツール選択中） */}
+          {/* 部品サイズ設定 */}
           {selectedTool !== 'select' && selectedTool !== 'wire' && (
              <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mb-2 animate-fade-in">
                <h3 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2 flex justify-between">
@@ -800,11 +820,28 @@ export default function UniversalBoardDesigner() {
       {/* メインエリア */}
       <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden">
         
+        {/* 上部ツールバー */}
         <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none z-10">
           <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto">
              <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))} className="p-2 hover:bg-gray-100 rounded"><Minus size={16} /></button>
              <span className="p-2 text-sm font-mono min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
              <button onClick={() => setScale(s => Math.min(3, s + 0.1))} className="p-2 hover:bg-gray-100 rounded"><Plus size={16} /></button>
+          </div>
+
+          {/* ビュー切り替えスイッチ */}
+          <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex pointer-events-auto">
+            <button 
+              onClick={() => setViewSide('front')}
+              className={`flex items-center gap-1 px-3 py-1 rounded text-sm ${viewSide === 'front' ? 'bg-indigo-100 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <Layers size={14} /> 表面
+            </button>
+            <button 
+              onClick={() => setViewSide('back')}
+              className={`flex items-center gap-1 px-3 py-1 rounded text-sm ${viewSide === 'back' ? 'bg-indigo-100 text-indigo-700 font-bold' : 'text-gray-600 hover:bg-gray-100'}`}
+            >
+              <Repeat size={14} /> 裏面
+            </button>
           </div>
 
           {selectedItem && (
@@ -838,7 +875,7 @@ export default function UniversalBoardDesigner() {
           >
             <svg
               ref={svgRef}
-              width={boardConfig.width * boardConfig.gridSize + boardConfig.gridSize}
+              width={totalBoardWidth}
               height={boardConfig.height * boardConfig.gridSize + boardConfig.gridSize}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove} 
@@ -854,150 +891,162 @@ export default function UniversalBoardDesigner() {
                  </pattern>
               </defs>
 
-              <g>{renderGridHoles()}</g>
+              {/* 全体を反転させるコンテナ */}
+              <g transform={viewSide === 'back' ? `scale(-1, 1) translate(-${totalBoardWidth}, 0)` : ''}>
+                
+                <g>{renderGridHoles()}</g>
 
-              {selectedTool === 'wire' && hoveredGrid && (
-                <g className="pointer-events-none">
-                  <circle
-                    cx={hoveredGrid.x * boardConfig.gridSize}
-                    cy={hoveredGrid.y * boardConfig.gridSize}
-                    r={boardConfig.gridSize / 2.5}
-                    fill={wireColor}
-                    opacity={0.3}
-                  />
-                  <circle
-                    cx={hoveredGrid.x * boardConfig.gridSize}
-                    cy={hoveredGrid.y * boardConfig.gridSize}
-                    r={2}
-                    fill="white"
-                  />
-                </g>
-              )}
+                {selectedTool === 'wire' && hoveredGrid && (
+                  <g className="pointer-events-none">
+                    <circle
+                      cx={hoveredGrid.x * boardConfig.gridSize}
+                      cy={hoveredGrid.y * boardConfig.gridSize}
+                      r={boardConfig.gridSize / 2.5}
+                      fill={wireColor}
+                      opacity={0.3}
+                    />
+                    <circle
+                      cx={hoveredGrid.x * boardConfig.gridSize}
+                      cy={hoveredGrid.y * boardConfig.gridSize}
+                      r={2}
+                      fill="white"
+                    />
+                  </g>
+                )}
 
-              <g className="wires">
-                {wires.map(wire => {
-                  const isSelected = selectedItem?.type === 'wire' && selectedItem.id === wire.id;
-                  return (
-                    <g 
-                      key={wire.id} 
-                      onClick={(e) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id: wire.id }); }}
-                      className="cursor-pointer hover:opacity-80"
-                    >
-                      <line 
-                        x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
-                        x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
-                        stroke="transparent" strokeWidth={boardConfig.gridSize/2}
-                      />
-                      <line 
-                        x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
-                        x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
-                        stroke={wire.color} 
-                        strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
-                        strokeLinecap="round"
-                        opacity={0.9}
-                      />
-                      {isSelected && (
+                <g className="wires">
+                  {wires.map(wire => {
+                    const isSelected = selectedItem?.type === 'wire' && selectedItem.id === wire.id;
+                    return (
+                      <g 
+                        key={wire.id} 
+                        onClick={(e) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id: wire.id }); }}
+                        className="cursor-pointer hover:opacity-80"
+                      >
                         <line 
                           x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
                           x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
-                          stroke="white" 
-                          strokeWidth={1} 
-                          strokeDasharray="2,2" 
+                          stroke="transparent" strokeWidth={boardConfig.gridSize/2}
                         />
-                      )}
-                    </g>
-                  );
-                })}
-
-                {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
-                   <g className="pointer-events-none">
-                     <line 
-                      x1={currentWireStart.x * boardConfig.gridSize} 
-                      y1={currentWireStart.y * boardConfig.gridSize}
-                      x2={hoveredGrid.x * boardConfig.gridSize} 
-                      y2={hoveredGrid.y * boardConfig.gridSize}
-                      stroke={wireColor} 
-                      strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
-                      strokeLinecap="round"
-                      opacity={0.6}
-                      strokeDasharray="4,4"
-                     />
-                     <circle 
-                      cx={currentWireStart.x * boardConfig.gridSize} 
-                      cy={currentWireStart.y * boardConfig.gridSize}
-                      r={4}
-                      fill={wireColor}
-                     />
-                   </g>
-                )}
-              </g>
-
-              <g className="components">
-                {components.map(comp => {
-                  const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
-                  const isSelected = selectedItem?.type === 'component' && selectedItem.id === comp.id;
-                  
-                  const offsetX = -boardConfig.gridSize / 2;
-                  const offsetY = -boardConfig.gridSize / 2;
-                  
-                  const w = comp.width * boardConfig.gridSize;
-                  const h = comp.height * boardConfig.gridSize;
-
-                  return (
-                    <g
-                      key={comp.id}
-                      transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`}
-                      onMouseDown={(e) => handleComponentDragStart(e, comp.id)}
-                      className="cursor-move"
-                      style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none' }}
-                    >
-                      {isSelected && (
-                        <rect 
-                          x={-2} y={-2} 
-                          width={w + 4} 
-                          height={h + 4} 
-                          fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" 
+                        <line 
+                          x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
+                          x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
+                          stroke={wire.color} 
+                          strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
+                          strokeLinecap="round"
+                          opacity={0.9}
                         />
-                      )}
-                      
-                      {def.render(w, h, boardConfig.gridSize, comp.width, comp.height)}
+                        {isSelected && (
+                          <line 
+                            x1={wire.startX * boardConfig.gridSize} y1={wire.startY * boardConfig.gridSize}
+                            x2={wire.endX * boardConfig.gridSize} y2={wire.endY * boardConfig.gridSize}
+                            stroke="white" 
+                            strokeWidth={1} 
+                            strokeDasharray="2,2" 
+                          />
+                        )}
+                      </g>
+                    );
+                  })}
 
-                      {/* ラベル表示 */}
-                      {showLabels && (
-                        <g transform={`rotate(${-comp.rotation}, ${w/2}, ${h/2})`}> 
-                          {/* 回転をキャンセルして正立させる場合（オプション） 
-                              今回は単純に部品と一緒に回転させるためそのまま描画 */}
-                          <text 
-                            x={w / 2} 
-                            y={-5} 
-                            textAnchor="middle" 
-                            fontSize={boardConfig.gridSize * 0.6} 
-                            fill="white"
-                            className="font-bold drop-shadow-md select-none pointer-events-none"
-                            style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}
-                          >
-                            {comp.name}
-                          </text>
-                          <text 
-                            x={w / 2} 
-                            y={h + boardConfig.gridSize * 0.6} 
-                            textAnchor="middle" 
-                            fontSize={boardConfig.gridSize * 0.5} 
-                            fill="#ddd"
-                            className="drop-shadow-md select-none pointer-events-none"
-                            style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}
-                          >
-                            {comp.value}
-                          </text>
-                        </g>
-                      )}
+                  {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
+                    <g className="pointer-events-none">
+                      <line 
+                        x1={currentWireStart.x * boardConfig.gridSize} 
+                        y1={currentWireStart.y * boardConfig.gridSize}
+                        x2={hoveredGrid.x * boardConfig.gridSize} 
+                        y2={hoveredGrid.y * boardConfig.gridSize}
+                        stroke={wireColor} 
+                        strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
+                        strokeLinecap="round"
+                        opacity={0.6}
+                        strokeDasharray="4,4"
+                      />
+                      <circle 
+                        cx={currentWireStart.x * boardConfig.gridSize} 
+                        cy={currentWireStart.y * boardConfig.gridSize}
+                        r={4}
+                        fill={wireColor}
+                      />
                     </g>
-                  );
-                })}
+                  )}
+                </g>
+
+                <g className="components" style={{ opacity: viewSide === 'back' ? 0.3 : 1 }}>
+                  {components.map(comp => {
+                    const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
+                    const isSelected = selectedItem?.type === 'component' && selectedItem.id === comp.id;
+                    
+                    const offsetX = -boardConfig.gridSize / 2;
+                    const offsetY = -boardConfig.gridSize / 2;
+                    
+                    const w = comp.width * boardConfig.gridSize;
+                    const h = comp.height * boardConfig.gridSize;
+
+                    // ラベル表示位置の補正
+                    // 裏面のときは文字が反転しないように再反転(scaleX: -1)させる必要がある
+                    const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
+
+                    return (
+                      <g
+                        key={comp.id}
+                        transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`}
+                        onMouseDown={(e) => handleComponentDragStart(e, comp.id)}
+                        className="cursor-move"
+                        style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none' }}
+                      >
+                        {isSelected && (
+                          <rect 
+                            x={-2} y={-2} 
+                            width={w + 4} 
+                            height={h + 4} 
+                            fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" 
+                          />
+                        )}
+                        
+                        {def.render(w, h, boardConfig.gridSize, comp.width, comp.height)}
+
+                        {/* ラベル表示 */}
+                        {showLabels && (
+                          <g transform={`rotate(${-comp.rotation}, ${w/2}, ${h/2})`}> 
+                            <g transform={`translate(${w/2}, 0)`}>
+                              <g transform={labelTransform}>
+                                <text 
+                                  x={0} 
+                                  y={-5} 
+                                  textAnchor="middle" 
+                                  fontSize={boardConfig.gridSize * 0.6} 
+                                  fill="white"
+                                  className="font-bold drop-shadow-md select-none pointer-events-none"
+                                  style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}
+                                >
+                                  {comp.name}
+                                </text>
+                                <text 
+                                  x={0} 
+                                  y={h + boardConfig.gridSize * 0.6} 
+                                  textAnchor="middle" 
+                                  fontSize={boardConfig.gridSize * 0.5} 
+                                  fill="#ddd"
+                                  className="drop-shadow-md select-none pointer-events-none"
+                                  style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}
+                                >
+                                  {comp.value}
+                                </text>
+                              </g>
+                            </g>
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
               </g>
 
             </svg>
             
+            {/* 四隅の固定穴（反転の影響を受けないようSVGの外側に配置、あるいはSVG内で反転させる） */}
+            {/* ここではSVG内反転の影響を受けるため、SVG外の装飾として配置している既存コードを維持 */}
             <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
             <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
             <div className="absolute bottom-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
