@@ -440,6 +440,15 @@
                 setComponents(prev => prev.map(c => c.id === selectedItem.id ? { ...c, [key]: val } : c));
             };
 
+            // 配置済み部品のサイズ変更
+            const handleComponentSizeChange = (key, value) => {
+                if (!selectedItem || selectedItem.type !== 'component') return;
+                const newVal = Math.max(1, Number(value));
+                setComponents(prev => prev.map(c => 
+                    c.id === selectedItem.id ? { ...c, [key]: newVal } : c
+                ));
+            };
+
             // 配線色の変更（現在の面の設定を更新）
             const changeWireColor = (color) => {
                 setWireColors(prev => ({
@@ -881,6 +890,32 @@
                                     <div className="space-y-2 text-xs">
                                         <label className="block"><span className="text-gray-600 block mb-1">部品名 (例: R1)</span><input type="text" value={currentSelectedComponent.name || ''} onChange={e => handleAttributeChange('name', e.target.value)} className="w-full p-1 border rounded" /></label>
                                         <label className="block"><span className="text-gray-600 block mb-1">説明 (例: 10kΩ)</span><input type="text" value={currentSelectedComponent.value || ''} onChange={e => handleAttributeChange('value', e.target.value)} className="w-full p-1 border rounded" /></label>
+                                        
+                                        {/* サイズ変更フィールド */}
+                                        <div className="grid grid-cols-2 gap-2 pt-1 border-t border-indigo-200 mt-2">
+                                             <label>
+                                               幅（マス）: 
+                                               <input 
+                                                type="number" 
+                                                min="1" 
+                                                max="40" 
+                                                value={currentSelectedComponent.width} 
+                                                onChange={e => handleComponentSizeChange('width', e.target.value)} 
+                                                className="w-full p-1 border rounded" 
+                                               />
+                                             </label>
+                                             <label>
+                                               高さ（マス）: 
+                                               <input 
+                                                type="number" 
+                                                min="1" 
+                                                max="40" 
+                                                value={currentSelectedComponent.height} 
+                                                onChange={e => handleComponentSizeChange('height', e.target.value)} 
+                                                className="w-full p-1 border rounded" 
+                                               />
+                                             </label>
+                                        </div>
                                     </div>
                                 </div>
                             )}
