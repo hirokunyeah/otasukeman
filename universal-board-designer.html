@@ -160,6 +160,22 @@
             return pins;
         };
 
+        // 配線の描画ポイント計算ヘルパー
+        const calculateWirePoints = (x1, y1, x2, y2, routeType, gridSize) => {
+            const sx = x1 * gridSize;
+            const sy = y1 * gridSize;
+            const ex = x2 * gridSize;
+            const ey = y2 * gridSize;
+
+            if (routeType === 'VH') {
+                // 縦 -> 横
+                return `${sx},${sy} ${sx},${ey} ${ex},${ey}`;
+            } else {
+                // 横 -> 縦 (デフォルト 'HV')
+                return `${sx},${sy} ${ex},${sy} ${ex},${ey}`;
+            }
+        };
+
         const COMPONENT_DEFINITIONS = {
             RESISTOR: { 
                 id: 'resistor', 
@@ -350,6 +366,9 @@
             const [draggedWireEndpoint, setDraggedWireEndpoint] = useState(null);
             const [hoveredGrid, setHoveredGrid] = useState(null);
 
+            // 作成中の配線ルートタイプ ('HV' | 'VH')
+            const [currentWireRouteType, setCurrentWireRouteType] = useState('HV');
+
             // モーダル管理 { isOpen, type: 'alert'|'confirm', message, onConfirm }
             const [modal, setModal] = useState({ isOpen: false, type: null, message: '', onConfirm: null });
 
@@ -468,7 +487,16 @@
                 if (x < 0 || x > boardConfig.width || y < 0 || y > boardConfig.height) return;
 
                 if (selectedTool === 'wire') {
-                    setCurrentWireStart({ x, y });
+                    if (currentWireStart) {
+                         // 始点がすでにある場合 -> 終点としてワイヤー作成 & 次の始点へ
+                         if (x !== currentWireStart.x || y !== currentWireStart.y) {
+                             addWire(currentWireStart, { x, y });
+                             setCurrentWireStart({ x, y }); // 終点を次の始点にする
+                         }
+                    } else {
+                        // 始点がない場合 -> 始点をセット
+                        setCurrentWireStart({ x, y });
+                    }
                 } else if (selectedTool === 'select') {
                     if (e.target.tagName === 'svg' || e.target.id === 'board-bg') {
                         setSelectedItem(null);
@@ -512,6 +540,7 @@
                     if (isRightDragging.current && e.button === 2) {
                         isRightDragging.current = false;
                         if (!hasPanned.current) {
+                            // パンニングされなかった場合のみキャンセル処理
                             if (currentWireStart || draggedComponent || draggedWireEndpoint) {
                                 setCurrentWireStart(null);
                                 setDraggedComponent(null);
@@ -588,15 +617,13 @@
             };
 
             const handleMouseUp = (e) => {
-                if (selectedTool === 'wire' && currentWireStart) {
-                    const { x, y } = getGridCoords(e.clientX, e.clientY);
-                    if (x !== currentWireStart.x || y !== currentWireStart.y) {
-                        addWire(currentWireStart, { x, y });
-                    }
-                    setCurrentWireStart(null);
+                // 配線作成処理は MouseDown に移動したため削除
+                if (draggedComponent) {
+                    setDraggedComponent(null);
                 }
-                setDraggedComponent(null);
-                setDraggedWireEndpoint(null);
+                if (draggedWireEndpoint) {
+                    setDraggedWireEndpoint(null);
+                }
             };
 
             const handleMouseLeave = () => setHoveredGrid(null);
@@ -644,7 +671,8 @@
                     endX: end.x, 
                     endY: end.y, 
                     color: currentWireColor,
-                    side: viewSide // 現在のビュー面を記録
+                    side: viewSide, // 現在のビュー面を記録
+                    routeType: currentWireRouteType // 現在のルートタイプ
                 };
                 setWires([...wires, newWire]);
             };
@@ -669,20 +697,43 @@
                 }));
             }, [selectedItem, components]);
 
+            // スペースキーでのルート切り替え処理
+            const toggleRouteType = useCallback(() => {
+                // 配線作成中なら現在のルートタイプを切り替え
+                if (currentWireStart) {
+                    setCurrentWireRouteType(prev => prev === 'HV' ? 'VH' : 'HV');
+                } 
+                // 配線選択中ならその配線のルートタイプを切り替え
+                else if (selectedItem?.type === 'wire') {
+                    setWires(prev => prev.map(w => {
+                         if (w.id === selectedItem.id) {
+                             const newType = (w.routeType || 'HV') === 'HV' ? 'VH' : 'HV';
+                             return { ...w, routeType: newType };
+                         }
+                         return w;
+                    }));
+                }
+            }, [currentWireStart, selectedItem]);
+
             useEffect(() => {
                 const handleKeyDown = (e) => {
                     if (e.target.tagName === 'INPUT') return;
                     if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
                     if (e.key === 'r' || e.key === 'R') rotateSelected();
+                    if (e.key === ' ') {
+                        e.preventDefault(); // スクロール防止
+                        toggleRouteType();
+                    }
                     if (e.key === 'Escape') {
                         selectTool('select');
                         setDraggedComponent(null);
                         setDraggedWireEndpoint(null);
+                        setCurrentWireStart(null);
                     }
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected, rotateSelected]);
+            }, [deleteSelected, rotateSelected, toggleRouteType]);
 
             const handleComponentDragStart = (e, id) => {
                 e.stopPropagation();
@@ -774,6 +825,7 @@
                         setDraggedComponent(null);
                         setDraggedWireEndpoint(null);
                         setCurrentWireStart(null);
+                        setCurrentWireRouteType('HV');
                         
                         setComponentSizes(Object.values(COMPONENT_DEFINITIONS).reduce((acc, def) => {
                             acc[def.id] = { width: def.defaultWidth, height: def.defaultHeight };
@@ -966,7 +1018,7 @@
                                     ))}
                                 </div>
                             </div>
-                            <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p></div>
+                            <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Space:</strong> 配線ルート切替</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p></div>
                         </div>
                         <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
                             <button onClick={resetDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="新規作成"><Icon d={Icons.FilePlus} size={16} /> 新規</button>
@@ -1023,11 +1075,10 @@
                                                 // 現在の面の配線のみ選択可能
                                                 const isSelected = isActiveSide && selectedItem?.type === 'wire' && selectedItem.id === wire.id;
                                                 
-                                                const x1 = wire.startX * boardConfig.gridSize;
-                                                const y1 = wire.startY * boardConfig.gridSize;
-                                                const x2 = wire.endX * boardConfig.gridSize;
-                                                const y2 = wire.endY * boardConfig.gridSize;
-                                                const points = `${x1},${y1} ${x2},${y1} ${x2},${y2}`;
+                                                // ルートタイプを取得（デフォルトはHV）
+                                                const routeType = wire.routeType || 'HV';
+
+                                                const points = calculateWirePoints(wire.startX, wire.startY, wire.endX, wire.endY, routeType, boardConfig.gridSize);
                                                 
                                                 // 非アクティブな面の配線は薄く、操作不可にする
                                                 const opacity = isActiveSide ? 0.9 : 0.15;
@@ -1043,7 +1094,16 @@
                                             })}
                                             {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
                                                 <g className="pointer-events-none">
-                                                    <polyline points={`${currentWireStart.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${currentWireStart.y * boardConfig.gridSize} ${hoveredGrid.x * boardConfig.gridSize},${hoveredGrid.y * boardConfig.gridSize}`} stroke={currentWireColor} fill="none" strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} strokeLinecap="round" strokeLinejoin="round" opacity={0.6} strokeDasharray="4,4" />
+                                                    <polyline 
+                                                        points={calculateWirePoints(currentWireStart.x, currentWireStart.y, hoveredGrid.x, hoveredGrid.y, currentWireRouteType, boardConfig.gridSize)} 
+                                                        stroke={currentWireColor} 
+                                                        fill="none" 
+                                                        strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} 
+                                                        strokeLinecap="round" 
+                                                        strokeLinejoin="round" 
+                                                        opacity={0.6} 
+                                                        strokeDasharray="4,4" 
+                                                    />
                                                     <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={currentWireColor} />
                                                 </g>
                                             )}
