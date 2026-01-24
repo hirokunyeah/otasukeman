@@ -272,9 +272,6 @@
                         <g>
                             <rect x={bodyX} y={bodyY} width={bodyW} height={bodyH} fill="#1f2937" rx="2" />
                             <path d={`M ${bodyX} ${h / 2 - 5} Q ${bodyX + 5} ${h / 2} ${bodyX} ${h / 2 + 5}`} fill="#374151" stroke="none" />
-                            {bodyW > 20 && bodyH > 10 && (
-                                <text x={w / 2} y={h / 2} textAnchor="middle" dominantBaseline="middle" fill="white" fontSize="8" style={{ pointerEvents: 'none' }}>IC</text>
-                            )}
                             {pins}
                         </g>
                     );
@@ -303,7 +300,7 @@
                     const padding = 2;
                     return (
                         <g>
-                            <rect x={padding} y={padding} width={w - padding * 2} height={h - padding * 2} fill="#8b5cf6" fillOpacity="0.4" stroke="#7c3aed" strokeWidth="2" rx="4" />
+                            <rect x={padding} y={padding} width={w - padding * 2} height={h - padding * 2} fill="#8b5cf6" stroke="#6d28d9" strokeWidth="2" rx="4" />
                             {pins}
                         </g>
                     );
@@ -1144,10 +1141,12 @@
                                                                     {def.render(w, h, boardConfig.gridSize, comp.width, comp.height)}
                                                                     {showLabels && (
                                                                         <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
-                                                                            <g transform={`translate(${w / 2}, 0)`}>
+                                                                            <g transform={`translate(${w / 2}, ${h / 2})`}>
                                                                                 <g transform={labelTransform}>
-                                                                                    <text x={0} y={-5} textAnchor="middle" fontSize={boardConfig.gridSize * 0.6} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}>{comp.name}</text>
-                                                                                    <text x={0} y={h + boardConfig.gridSize * 0.6} textAnchor="middle" fontSize={boardConfig.gridSize * 0.5} fill="#ddd" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 2px rgba(0,0,0,0.8)' }}>{comp.value}</text>
+                                                                                    <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(10, boardConfig.gridSize * 0.5)} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.name}</text>
+                                                                                    {comp.value && (
+                                                                                        <text x={0} y={Math.max(10, boardConfig.gridSize * 0.5)} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(8, boardConfig.gridSize * 0.4)} fill="#eee" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.value}</text>
+                                                                                    )}
                                                                                 </g>
                                                                             </g>
                                                                         </g>
