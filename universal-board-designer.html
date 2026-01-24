@@ -282,7 +282,7 @@
                 name: '汎用部品',
                 defaultWidth: 3,
                 defaultHeight: 1,
-                render: (w, h, gridSize, gridW, gridH) => {
+                render: (w, h, gridSize, gridW, gridH, viewSide) => {
                     const pins = [];
                     for (let y = 0; y < gridH; y++) {
                         for (let x = 0; x < gridW; x++) {
@@ -301,7 +301,7 @@
                     return (
                         <g>
                             <rect x={padding} y={padding} width={w - padding * 2} height={h - padding * 2} fill="#8b5cf6" stroke="#6d28d9" strokeWidth="2" rx="4" />
-                            {pins}
+                            {viewSide !== 'front' && pins}
                         </g>
                     );
                 }
@@ -1138,7 +1138,7 @@
                                                             return (
                                                                 <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => handleComponentDragStart(e, comp.id)} className={selectedTool === 'wire' ? "" : "cursor-move"} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: selectedTool === 'wire' ? 'none' : 'auto' }}>
                                                                     {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
-                                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height)}
+                                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide)}
                                                                     {showLabels && (
                                                                         <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
                                                                             <g transform={`translate(${w / 2}, ${h / 2})`}>
