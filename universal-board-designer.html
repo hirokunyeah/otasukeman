@@ -104,7 +104,12 @@
             Minus: <line x1="5" x2="19" y1="12" y2="12" />,
             Plus: <><line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" /></>,
             Layers: <><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></>,
-            Repeat: <><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>
+            Repeat: <><path d="m17 2 4 4-4 4" /><path d="M3 11v-1a4 4 0 0 1 4-4h14" /><path d="m7 22-4-4 4-4" /><path d="M21 13v1a4 4 0 0 1-4 4H3" /></>,
+            ArrowUp: <><line x1="12" x2="12" y1="19" y2="5" /><polyline points="5 12 12 5 19 12" /></>,
+            ArrowDown: <><line x1="12" x2="12" y1="5" y2="19" /><polyline points="19 12 12 19 5 12" /></>,
+            ArrowLeft: <><line x1="19" x2="5" y1="12" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
+            ArrowRight: <><line x1="5" x2="19" y1="12" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
+            Move: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 15 22 12 19 9" /><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /></>
         };
 
         // --- モーダルコンポーネント ---
@@ -805,6 +810,35 @@
                 }
             };
 
+            // 全体移動機能
+            const shiftBoard = (direction) => {
+                let dx = 0;
+                let dy = 0;
+                const gridSize = boardConfig.gridSize;
+
+                switch (direction) {
+                    case 'up': dy = -1; break;
+                    case 'down': dy = 1; break;
+                    case 'left': dx = -1; break;
+                    case 'right': dx = 1; break;
+                    default: return;
+                }
+
+                setComponents(prev => prev.map(c => ({
+                    ...c,
+                    x: c.x + dx * gridSize,
+                    y: c.y + dy * gridSize
+                })));
+
+                setWires(prev => prev.map(w => ({
+                    ...w,
+                    startX: w.startX + dx,
+                    startY: w.startY + dy,
+                    endX: w.endX + dx,
+                    endY: w.endY + dy
+                })));
+            };
+
             // モーダル表示ヘルパー
             const openAlert = (message) => {
                 setModal({ isOpen: true, type: 'alert', message, onConfirm: null });
@@ -928,6 +962,23 @@
                                     <label className="flex flex-col"><span className="mb-1 text-gray-600">横穴数</span><input type="number" value={boardConfig.width} onChange={(e) => setBoardConfig({ ...boardConfig, width: Number(e.target.value) })} className="p-1 border rounded" min="5" max="100" /></label>
                                     <label className="flex flex-col"><span className="mb-1 text-gray-600">縦穴数</span><input type="number" value={boardConfig.height} onChange={(e) => setBoardConfig({ ...boardConfig, height: Number(e.target.value) })} className="p-1 border rounded" min="5" max="100" /></label>
                                     <label className="flex flex-col col-span-2"><span className="mb-1 text-gray-600">ピッチ (mm)</span><input type="number" value={boardConfig.pitch} onChange={(e) => { const p = Math.max(0.1, Number(e.target.value)); setBoardConfig({ ...boardConfig, pitch: p, gridSize: p * PIXELS_PER_MM }); }} className="p-1 border rounded" step="0.01" min="0.1" max="10" /></label>
+                                </div>
+                            </div>
+                            {/* 全体移動 */}
+                            <div className="bg-gray-50 p-3 rounded border border-gray-200">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <Icon d={Icons.Move} size={12} /> 全体移動
+                                </h3>
+                                <div className="grid grid-cols-3 gap-1 max-w-[120px] mx-auto">
+                                    <div></div>
+                                    <button onClick={() => shiftBoard('up')} className="p-1 bg-white border border-gray-300 rounded hover:bg-gray-100 flex justify-center" title="上へ移動"><Icon d={Icons.ArrowUp} size={16} /></button>
+                                    <div></div>
+                                    <button onClick={() => shiftBoard('left')} className="p-1 bg-white border border-gray-300 rounded hover:bg-gray-100 flex justify-center" title="左へ移動"><Icon d={Icons.ArrowLeft} size={16} /></button>
+                                    <div className="flex items-center justify-center text-xs text-gray-400"><Icon d={Icons.Move} size={12} /></div>
+                                    <button onClick={() => shiftBoard('right')} className="p-1 bg-white border border-gray-300 rounded hover:bg-gray-100 flex justify-center" title="右へ移動"><Icon d={Icons.ArrowRight} size={16} /></button>
+                                    <div></div>
+                                    <button onClick={() => shiftBoard('down')} className="p-1 bg-white border border-gray-300 rounded hover:bg-gray-100 flex justify-center" title="下へ移動"><Icon d={Icons.ArrowDown} size={16} /></button>
+                                    <div></div>
                                 </div>
                             </div>
                             {/* 表示設定 */}
