@@ -109,34 +109,41 @@
             ArrowDown: <><line x1="12" x2="12" y1="5" y2="19" /><polyline points="19 12 12 19 5 12" /></>,
             ArrowLeft: <><line x1="19" x2="5" y1="12" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
             ArrowRight: <><line x1="5" x2="19" y1="12" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
-            Move: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 15 22 12 19 9" /><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /></>
+            Move: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 15 22 12 19 9" /><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /></>,
+            List: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>
         };
 
         // --- モーダルコンポーネント ---
-        const Modal = ({ isOpen, type, message, onClose, onConfirm }) => {
+        const Modal = ({ isOpen, type, message, title, children, onClose, onConfirm }) => {
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fade-in">
-                    <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full mx-4 border border-gray-200">
-                        <div className="mb-4 text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">{message}</div>
-                        <div className="flex justify-end gap-3">
-                            {type === 'confirm' && (
+                    <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-200 overflow-hidden flex flex-col max-h-[80vh]">
+                        {title && <h3 className="text-lg font-bold mb-4 text-gray-800">{title}</h3>}
+                        <div className="mb-4 text-gray-800 text-sm whitespace-pre-wrap leading-relaxed overflow-y-auto custom-scrollbar">
+                            {message && <p>{message}</p>}
+                            {children}
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2 border-t border-gray-100 flex-shrink-0">
+                            {(type === 'confirm' || type === 'custom') && (
                                 <button
                                     onClick={onClose}
                                     className="px-4 py-2 text-sm text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-medium transition-colors"
                                 >
-                                    キャンセル
+                                    {type === 'custom' ? '閉じる' : 'キャンセル'}
                                 </button>
                             )}
-                            <button
-                                onClick={() => {
-                                    if (type === 'confirm' && onConfirm) onConfirm();
-                                    onClose();
-                                }}
-                                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium shadow-sm transition-colors"
-                            >
-                                OK
-                            </button>
+                            {type !== 'custom' && (
+                                <button
+                                    onClick={() => {
+                                        if (type === 'confirm' && onConfirm) onConfirm();
+                                        onClose();
+                                    }}
+                                    className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 font-medium shadow-sm transition-colors"
+                                >
+                                    OK
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -392,8 +399,9 @@
             // 作成中の配線ルートタイプ ('HV' | 'VH')
             const [currentWireRouteType, setCurrentWireRouteType] = useState('HV');
 
-            // モーダル管理 { isOpen, type: 'alert'|'confirm', message, onConfirm }
-            const [modal, setModal] = useState({ isOpen: false, type: null, message: '', onConfirm: null });
+            // モーダル管理 { isOpen, type: 'alert'|'confirm'|'custom', message, title, children, onConfirm }
+            const ModalStateInit = { isOpen: false, type: null, message: '', title: '', children: null, onConfirm: null };
+            const [modal, setModal] = useState(ModalStateInit);
 
             // 画面のオフセット（パンニング用）
             const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -846,14 +854,18 @@
             };
 
             // モーダル表示ヘルパー
+            // モーダル表示ヘルパー
             const openAlert = (message) => {
-                setModal({ isOpen: true, type: 'alert', message, onConfirm: null });
+                setModal({ ...ModalStateInit, isOpen: true, type: 'alert', message });
             };
             const openConfirm = (message, onConfirm) => {
-                setModal({ isOpen: true, type: 'confirm', message, onConfirm });
+                setModal({ ...ModalStateInit, isOpen: true, type: 'confirm', message, onConfirm });
+            };
+            const openCustomModal = (title, children) => {
+                setModal({ ...ModalStateInit, isOpen: true, type: 'custom', title, children });
             };
             const closeModal = () => {
-                setModal({ ...modal, isOpen: false });
+                setModal({ ...ModalStateInit, isOpen: false });
             };
 
             const resetDesign = () => {
@@ -996,6 +1008,59 @@
                                     <button onClick={() => shiftBoard('down')} className="p-1 bg-white border border-gray-300 rounded hover:bg-gray-100 flex justify-center" title="下へ移動"><Icon d={Icons.ArrowDown} size={16} /></button>
                                     <div></div>
                                 </div>
+                            </div>
+
+                            {/* BOM (部品表) */}
+                            <div className="p-2">
+                                <button onClick={() => {
+                                    // BOM計算
+                                    const summary = components.reduce((acc, comp) => {
+                                        const typeDef = COMPONENT_DEFINITIONS[comp.type.toUpperCase()];
+                                        const typeName = typeDef ? typeDef.name : comp.type;
+                                        const key = `${typeName} - ${comp.value || '(未指定)'}`;
+                                        if (!acc[key]) acc[key] = { type: typeName, value: comp.value || '(未指定)', count: 0, refs: [] };
+                                        acc[key].count++;
+                                        acc[key].refs.push(comp.name);
+                                        return acc;
+                                    }, {});
+
+                                    const content = (
+                                        <div className="w-full">
+                                            {Object.keys(summary).length === 0 ? (
+                                                <p className="text-center text-gray-500 py-4">配置されている部品はありません</p>
+                                            ) : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-xs border-collapse">
+                                                        <thead>
+                                                            <tr className="bg-gray-100 border-b border-gray-300">
+                                                                <th className="p-2 font-semibold text-gray-600">種類</th>
+                                                                <th className="p-2 font-semibold text-gray-600">値/規格</th>
+                                                                <th className="p-2 font-semibold text-gray-600 text-center">数量</th>
+                                                                <th className="p-2 font-semibold text-gray-600">参照名</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-200">
+                                                            {Object.values(summary).sort((a, b) => a.type.localeCompare(b.type)).map((item, idx) => (
+                                                                <tr key={idx} className="hover:bg-gray-50">
+                                                                    <td className="p-2 font-medium">{item.type}</td>
+                                                                    <td className="p-2">{item.value}</td>
+                                                                    <td className="p-2 text-center font-bold text-indigo-600">{item.count}</td>
+                                                                    <td className="p-2 text-gray-500 max-w-[150px] truncate" title={item.refs.join(', ')}>{item.refs.join(', ')}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                            <div className="mt-4 text-right text-xs text-gray-400">
+                                                合計部品数: {components.length}
+                                            </div>
+                                        </div>
+                                    );
+                                    openCustomModal('部品表 (BOM)', content);
+                                }} className="w-full flex items-center justify-center gap-2 p-2 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 transition-colors">
+                                    <Icon d={Icons.List} size={16} /> 部品表を表示
+                                </button>
                             </div>
                             {/* 表示設定 */}
                             <div>
@@ -1271,9 +1336,12 @@
                         isOpen={modal.isOpen}
                         type={modal.type}
                         message={modal.message}
+                        title={modal.title}
                         onClose={closeModal}
                         onConfirm={modal.onConfirm}
-                    />
+                    >
+                        {modal.children}
+                    </Modal>
                 </div>
             );
         };
