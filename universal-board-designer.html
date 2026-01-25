@@ -56,6 +56,53 @@
         .animate-fade-in {
             animation: fadeIn 0.2s ease-out forwards;
         }
+
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 10mm;
+            }
+
+            body {
+                background: white;
+                height: auto;
+                width: auto;
+                overflow: visible;
+            }
+
+            #root>div.flex {
+                display: block !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+
+            .print-only {
+                display: block !important;
+            }
+
+            .print-page {
+                page-break-after: always;
+                height: 95vh;
+                position: relative;
+                overflow: visible;
+            }
+
+            .print-page:last-child {
+                page-break-after: auto;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        .print-only {
+            display: none;
+        }
     </style>
 </head>
 
@@ -110,7 +157,8 @@
             ArrowLeft: <><line x1="19" x2="5" y1="12" y2="12" /><polyline points="12 19 5 12 12 5" /></>,
             ArrowRight: <><line x1="5" x2="19" y1="12" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
             Move: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 15 22 12 19 9" /><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /></>,
-            List: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>
+            List: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>,
+            Printer: <><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></>
         };
 
         // --- モーダルコンポーネント ---
@@ -359,6 +407,257 @@
         const DEFAULT_WIRE_COLORS = {
             front: '#3b82f6', // 青
             back: '#eab308'   // 黄
+        };
+
+        // --- ボードレンダリングコンポーネント (抽出) ---
+        const BoardRenderer = ({
+            boardConfig,
+            components,
+            wires,
+            viewSide,
+            showLabels,
+            wireColors,
+            selectedItem, // optional
+            hoveredGrid, // optional
+            currentWireStart, // optional
+            currentWireRouteType, // optional
+            onMouseDown, // optional
+            onMouseMove, // optional
+            onMouseUp, // optional
+            onMouseLeave, // optional
+            handleComponentDragStart, // optional
+            handleWireEndpointDragStart, // optional
+            handleWireClick, // optional
+            isPrintMode = false
+        }) => {
+            const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
+            const totalBoardHeight = boardConfig.height * boardConfig.gridSize + boardConfig.gridSize;
+
+            // Print Modeのときはイベントハンドラを無効化
+            const events = isPrintMode ? {} : {
+                onMouseDown, onMouseMove, onMouseUp, onMouseLeave
+            };
+
+            const renderGridHoles = () => {
+                const holes = [];
+                for (let y = 0; y <= boardConfig.height; y++) {
+                    for (let x = 0; x <= boardConfig.width; x++) {
+                        holes.push(
+                            <circle key={`${x}-${y}`} cx={x * boardConfig.gridSize} cy={y * boardConfig.gridSize} r={HOLE_RADIUS} fill="#1f2937" opacity={0.3} style={{ pointerEvents: 'none' }} />
+                        );
+                    }
+                }
+                return holes;
+            };
+
+            // current selection logic for highlighting
+            const currentSelectedWire = selectedItem?.type === 'wire' ? wires.find(w => w.id === selectedItem.id) : null;
+
+            return (
+                <svg width={totalBoardWidth} height={totalBoardHeight} {...events} className="block" style={{ backgroundColor: '#2d7a4d' }}>
+                    <defs>
+                        <pattern id="grid" width={boardConfig.gridSize} height={boardConfig.gridSize} patternUnits="userSpaceOnUse"><circle cx={boardConfig.gridSize / 2} cy={boardConfig.gridSize / 2} r={1} fill="#e5e7eb" opacity="0.5" /></pattern>
+                    </defs>
+                    <g transform={viewSide === 'back' ? `scale(-1, 1) translate(-${totalBoardWidth}, 0)` : ''}>
+                        <g>{renderGridHoles()}</g>
+
+                        {!isPrintMode && selectedItem?.tool === 'wire' && hoveredGrid && (
+                            <g className="pointer-events-none">
+                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill={wireColors[viewSide]} opacity={0.3} />
+                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={2} fill="white" />
+                            </g>
+                        )}
+
+                        {[viewSide === 'back' ? 'components' : 'wires', viewSide === 'back' ? 'wires' : 'components'].map(layer => {
+                            if (layer === 'wires') {
+                                return (
+                                    <g key="wires" className="wires">
+                                        {wires.map(wire => {
+                                            const wireSide = wire.side || 'back';
+                                            const isActiveSide = wireSide === viewSide;
+                                            const isSelected = !isPrintMode && isActiveSide && selectedItem?.type === 'wire' && selectedItem.id === wire.id;
+                                            const routeType = wire.routeType || 'HV';
+                                            const points = calculateWirePoints(wire.startX, wire.startY, wire.endX, wire.endY, routeType, boardConfig.gridSize);
+
+                                            // Print Mode: show all wires but dim inactive side ones differently?
+                                            // Requirements say: Page 2 Top=Front, Bottom=Back.
+                                            // For Front View: Show Front Wires clearly, Back Wires maybe dim or hidden? Usually we only show the side's wires or "through" view.
+                                            // Let's stick to current logic: Non-active side wires are ghosted.
+
+                                            const opacity = isActiveSide ? 0.9 : 0.15;
+                                            const pointerEvents = !isPrintMode && isActiveSide ? 'auto' : 'none';
+
+                                            return (
+                                                <g key={wire.id} onClick={(e) => { if (!isPrintMode && handleWireClick) handleWireClick(e, wire.id); }} className={!isPrintMode ? "cursor-pointer" : ""} style={{ opacity, pointerEvents }}>
+                                                    <polyline points={points} stroke="transparent" fill="none" strokeWidth={boardConfig.gridSize / 2} />
+                                                    <polyline points={points} stroke={wire.color} fill="none" strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} strokeLinecap="round" strokeLinejoin="round" />
+                                                    {isSelected && <polyline points={points} stroke="white" fill="none" strokeWidth={1} strokeDasharray="2,2" />}
+                                                </g>
+                                            );
+                                        })}
+                                        {!isPrintMode && currentWireStart && hoveredGrid && (
+                                            <g className="pointer-events-none">
+                                                <polyline
+                                                    points={calculateWirePoints(currentWireStart.x, currentWireStart.y, hoveredGrid.x, hoveredGrid.y, currentWireRouteType, boardConfig.gridSize)}
+                                                    stroke={wireColors[viewSide]}
+                                                    fill="none"
+                                                    strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)}
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    opacity={0.6}
+                                                    strokeDasharray="4,4"
+                                                />
+                                                <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={wireColors[viewSide]} />
+                                            </g>
+                                        )}
+                                    </g>
+                                );
+                            } else {
+                                return (
+                                    <g key="components" className="components" style={{ opacity: viewSide === 'back' ? 0.3 : 1 }}>
+                                        {components.map(comp => {
+                                            const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
+                                            const isSelected = !isPrintMode && selectedItem?.type === 'component' && selectedItem.id === comp.id;
+                                            const offsetX = -boardConfig.gridSize / 2;
+                                            const offsetY = -boardConfig.gridSize / 2;
+                                            const w = comp.width * boardConfig.gridSize;
+                                            const h = comp.height * boardConfig.gridSize;
+                                            const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
+                                            return (
+                                                <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => { if (!isPrintMode && handleComponentDragStart) handleComponentDragStart(e, comp.id); }} className={!isPrintMode ? "cursor-move" : ""} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: isPrintMode ? 'none' : 'auto' }}>
+                                                    {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
+                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide, comp)}
+                                                    {showLabels && (
+                                                        <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
+                                                            <g transform={`translate(${w / 2}, ${h / 2})`}>
+                                                                <g transform={labelTransform}>
+                                                                    <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(10, boardConfig.gridSize * 0.5)} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.name}</text>
+                                                                    {comp.value && (
+                                                                        <text x={0} y={Math.max(10, boardConfig.gridSize * 0.5)} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(8, boardConfig.gridSize * 0.4)} fill="#eee" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.value}</text>
+                                                                    )}
+                                                                </g>
+                                                            </g>
+                                                        </g>
+                                                    )}
+                                                </g>
+                                            );
+                                        })}
+                                    </g>
+                                );
+                            }
+                        })}
+
+                        {/* 最前面UI（ワイヤー端点ハンドル） */}
+                        {!isPrintMode && (
+                            <g className="ui-overlay">
+                                {currentSelectedWire && (
+                                    <>
+                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')}>
+                                            <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
+                                            <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
+                                        </g>
+                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')}>
+                                            <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
+                                            <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
+                                        </g>
+                                    </>
+                                )}
+                            </g>
+                        )}
+                    </g>
+                </svg>
+            );
+        };
+
+        // --- 印刷用レイアウトコンポーネント ---
+        const PrintLayout = ({ components, wires, boardConfig, showLabels, wireColors, projectTitle }) => {
+            // BOM Summary Calculation
+            const summary = components.reduce((acc, comp) => {
+                const typeDef = COMPONENT_DEFINITIONS[comp.type.toUpperCase()];
+                const typeName = typeDef ? typeDef.name : comp.type;
+                const key = `${typeName} - ${comp.value || '(未指定)'}`;
+                if (!acc[key]) acc[key] = { type: typeName, value: comp.value || '(未指定)', count: 0, refs: [] };
+                acc[key].count++;
+                acc[key].refs.push(comp.name);
+                return acc;
+            }, {});
+
+            return (
+                <div className="print-only font-sans text-gray-800">
+                    {/* Page 1: Board Views */}
+                    <div className="print-page flex flex-col p-8">
+                        <h1 className="text-xl font-bold mb-4">{projectTitle} - 配線図</h1>
+
+                        <div className="flex-1 flex flex-col gap-8 items-center">
+                            <div className="flex flex-col items-center">
+                                <h3 className="text-lg font-semibold mb-2">表面 (Front)</h3>
+                                <div className="border border-gray-300">
+                                    <BoardRenderer
+                                        boardConfig={boardConfig}
+                                        components={components}
+                                        wires={wires}
+                                        viewSide="front"
+                                        showLabels={showLabels}
+                                        wireColors={wireColors}
+                                        isPrintMode={true}
+                                    />
+                                </div>
+                            </div>
+
+                            <hr className="w-full border-t border-dashed border-gray-300 my-4" />
+
+                            <div className="flex flex-col items-center">
+                                <h3 className="text-lg font-semibold mb-2">裏面 (Back)</h3>
+                                <div className="border border-gray-300">
+                                    <BoardRenderer
+                                        boardConfig={boardConfig}
+                                        components={components}
+                                        wires={wires}
+                                        viewSide="back"
+                                        showLabels={showLabels}
+                                        wireColors={wireColors}
+                                        isPrintMode={true}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Page 2: BOM */}
+                    <div className="print-page flex flex-col p-8">
+                        <h1 className="text-2xl font-bold mb-2">{projectTitle}</h1>
+                        <h2 className="text-xl font-semibold mb-6 border-b pb-2">部品一覧表 (BOM)</h2>
+
+                        {Object.keys(summary).length === 0 ? (
+                            <p className="text-center text-gray-500 py-10">部品がありません</p>
+                        ) : (
+                            <table className="w-full text-left text-sm border-collapse border border-gray-300">
+                                <thead>
+                                    <tr className="bg-gray-100">
+                                        <th className="p-3 border border-gray-300 font-semibold w-1/4">種類</th>
+                                        <th className="p-3 border border-gray-300 font-semibold w-1/4">値/規格</th>
+                                        <th className="p-3 border border-gray-300 font-semibold w-16 text-center">数量</th>
+                                        <th className="p-3 border border-gray-300 font-semibold">参照名</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.values(summary).sort((a, b) => a.type.localeCompare(b.type)).map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td className="p-3 border border-gray-300">{item.type}</td>
+                                            <td className="p-3 border border-gray-300">{item.value}</td>
+                                            <td className="p-3 border border-gray-300 text-center">{item.count}</td>
+                                            <td className="p-3 border border-gray-300 break-words">{item.refs.join(', ')}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                        <div className="mt-8 text-right text-sm">
+                            合計部品数: {components.length}
+                        </div>
+                    </div>
+                </div>
+            );
         };
 
         // --- メインコンポーネント ---
@@ -966,7 +1265,7 @@
             return (
                 <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
                     {/* 左サイドバー */}
-                    <div className="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
+                    <div className="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10 no-print">
                         <div className="p-4 border-b border-gray-200">
                             <h1 className="text-lg font-bold flex items-center gap-2 text-indigo-600 mb-2">
                                 <Icon d={Icons.Grid3X3} size={20} />
@@ -1183,11 +1482,12 @@
                             <button onClick={resetDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="新規作成"><Icon d={Icons.FilePlus} size={16} /> 新規</button>
                             <button onClick={saveDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="保存"><Icon d={Icons.Save} size={16} /> 保存</button>
                             <label className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm cursor-pointer" title="開く"><Icon d={Icons.FolderOpen} size={16} /> 開く<input type="file" accept=".json" onChange={loadDesign} className="hidden" /></label>
+                            <button onClick={() => window.print()} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="印刷"><Icon d={Icons.Printer} size={16} /> 印刷</button>
                         </div>
                     </div>
 
                     {/* メインエリア */}
-                    <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden">
+                    <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden no-print">
                         <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none z-10">
                             <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto">
                                 <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))} className="p-2 hover:bg-gray-100 rounded"><Icon d={Icons.Minus} size={16} /></button>
@@ -1213,123 +1513,37 @@
                                 transformOrigin: '0 0',
                                 transition: isRightDragging.current ? 'none' : 'transform 0.1s ease-out'
                             }} className="bg-[#2d7a4d] shadow-2xl absolute left-0 top-0">
-                                <svg ref={svgRef} width={totalBoardWidth} height={boardConfig.height * boardConfig.gridSize + boardConfig.gridSize} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} id="board-bg" className="block">
-                                    <defs>
-                                        <pattern id="grid" width={boardConfig.gridSize} height={boardConfig.gridSize} patternUnits="userSpaceOnUse"><circle cx={boardConfig.gridSize / 2} cy={boardConfig.gridSize / 2} r={1} fill="#e5e7eb" opacity="0.5" /></pattern>
-                                    </defs>
-                                    <g transform={viewSide === 'back' ? `scale(-1, 1) translate(-${totalBoardWidth}, 0)` : ''}>
-                                        <g>{renderGridHoles()}</g>
-
-                                        {selectedTool === 'wire' && hoveredGrid && (
-                                            <g className="pointer-events-none">
-                                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill={currentWireColor} opacity={0.3} />
-                                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={2} fill="white" />
-                                            </g>
-                                        )}
-
-                                        {[viewSide === 'back' ? 'components' : 'wires', viewSide === 'back' ? 'wires' : 'components'].map(layer => {
-                                            if (layer === 'wires') {
-                                                return (
-                                                    <g key="wires" className="wires">
-                                                        {wires.map(wire => {
-                                                            const wireSide = wire.side || 'back';
-                                                            const isActiveSide = wireSide === viewSide;
-                                                            // 現在の面の配線のみ選択可能
-                                                            const isSelected = isActiveSide && selectedItem?.type === 'wire' && selectedItem.id === wire.id;
-
-                                                            // ルートタイプを取得（デフォルトはHV）
-                                                            const routeType = wire.routeType || 'HV';
-
-                                                            const points = calculateWirePoints(wire.startX, wire.startY, wire.endX, wire.endY, routeType, boardConfig.gridSize);
-
-                                                            // 非アクティブな面の配線は薄く、操作不可にする
-                                                            const opacity = isActiveSide ? 0.9 : 0.15;
-                                                            const pointerEvents = isActiveSide ? 'auto' : 'none';
-
-                                                            return (
-                                                                <g key={wire.id} onClick={(e) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id: wire.id }); }} className="cursor-pointer" style={{ opacity, pointerEvents }}>
-                                                                    <polyline points={points} stroke="transparent" fill="none" strokeWidth={boardConfig.gridSize / 2} />
-                                                                    <polyline points={points} stroke={wire.color} fill="none" strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)} strokeLinecap="round" strokeLinejoin="round" />
-                                                                    {isSelected && <polyline points={points} stroke="white" fill="none" strokeWidth={1} strokeDasharray="2,2" />}
-                                                                </g>
-                                                            );
-                                                        })}
-                                                        {selectedTool === 'wire' && currentWireStart && hoveredGrid && (
-                                                            <g className="pointer-events-none">
-                                                                <polyline
-                                                                    points={calculateWirePoints(currentWireStart.x, currentWireStart.y, hoveredGrid.x, hoveredGrid.y, currentWireRouteType, boardConfig.gridSize)}
-                                                                    stroke={currentWireColor}
-                                                                    fill="none"
-                                                                    strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)}
-                                                                    strokeLinecap="round"
-                                                                    strokeLinejoin="round"
-                                                                    opacity={0.6}
-                                                                    strokeDasharray="4,4"
-                                                                />
-                                                                <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={currentWireColor} />
-                                                            </g>
-                                                        )}
-                                                    </g>
-                                                );
-                                            } else {
-                                                return (
-                                                    <g key="components" className="components" style={{ opacity: viewSide === 'back' ? 0.3 : 1 }}>
-                                                        {components.map(comp => {
-                                                            const def = Object.values(COMPONENT_DEFINITIONS).find(t => t.id === comp.type);
-                                                            const isSelected = selectedItem?.type === 'component' && selectedItem.id === comp.id;
-                                                            const offsetX = -boardConfig.gridSize / 2;
-                                                            const offsetY = -boardConfig.gridSize / 2;
-                                                            const w = comp.width * boardConfig.gridSize;
-                                                            const h = comp.height * boardConfig.gridSize;
-                                                            const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
-                                                            return (
-                                                                <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => handleComponentDragStart(e, comp.id)} className={selectedTool === 'wire' ? "" : "cursor-move"} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: selectedTool === 'wire' ? 'none' : 'auto' }}>
-                                                                    {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
-                                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide, comp)}
-                                                                    {showLabels && (
-                                                                        <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
-                                                                            <g transform={`translate(${w / 2}, ${h / 2})`}>
-                                                                                <g transform={labelTransform}>
-                                                                                    <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(10, boardConfig.gridSize * 0.5)} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.name}</text>
-                                                                                    {comp.value && (
-                                                                                        <text x={0} y={Math.max(10, boardConfig.gridSize * 0.5)} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(8, boardConfig.gridSize * 0.4)} fill="#eee" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.value}</text>
-                                                                                    )}
-                                                                                </g>
-                                                                            </g>
-                                                                        </g>
-                                                                    )}
-                                                                </g>
-                                                            );
-                                                        })}
-                                                    </g>
-                                                );
-                                            }
-                                        })}
-
-                                        {/* 最前面UI（ワイヤー端点ハンドル） */}
-                                        <g className="ui-overlay">
-                                            {currentSelectedWire && (
-                                                <>
-                                                    <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')}>
-                                                        <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
-                                                        <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
-                                                    </g>
-                                                    <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')}>
-                                                        <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
-                                                        <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
-                                                    </g>
-                                                </>
-                                            )}
-                                        </g>
-                                    </g>
-                                </svg>
+                                <div ref={svgRef}>
+                                    <BoardRenderer
+                                        boardConfig={boardConfig}
+                                        components={components}
+                                        wires={wires}
+                                        viewSide={viewSide}
+                                        showLabels={showLabels}
+                                        wireColors={wireColors}
+                                        selectedItem={selectedItem}
+                                        hoveredGrid={hoveredGrid}
+                                        currentWireStart={currentWireStart}
+                                        currentWireRouteType={currentWireRouteType}
+                                        onMouseDown={handleMouseDown}
+                                        onMouseMove={handleMouseMove}
+                                        onMouseUp={handleMouseUp}
+                                        onMouseLeave={handleMouseLeave}
+                                        handleComponentDragStart={handleComponentDragStart}
+                                        handleWireEndpointDragStart={handleWireEndpointDragStart}
+                                        handleWireClick={(e, id) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id }); }}
+                                        isPrintMode={false}
+                                    />
+                                </div>
                                 <div className="absolute top-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
                                 <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
                                 <div className="absolute bottom-1 left-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
                                 <div className="absolute bottom-1 right-1 w-2 h-2 rounded-full bg-yellow-700/50"></div>
                             </div>
+
                         </div>
                     </div>
+
 
                     {/* モーダル */}
                     <Modal
@@ -1342,7 +1556,17 @@
                     >
                         {modal.children}
                     </Modal>
-                </div>
+
+                    {/* 印刷用レイアウト (非表示で存在し、印刷時のみ表示) */}
+                    <PrintLayout
+                        components={components}
+                        wires={wires}
+                        boardConfig={boardConfig}
+                        showLabels={showLabels}
+                        wireColors={wireColors}
+                        projectTitle={projectTitle}
+                    />
+                </div >
             );
         };
 
