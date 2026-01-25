@@ -230,10 +230,12 @@
                 name: 'コンデンサ',
                 defaultWidth: 2,
                 defaultHeight: 1,
-                render: (w, h, gridSize, gridW, gridH) => {
+                render: (w, h, gridSize, gridW, gridH, viewSide, comp) => {
                     const padLeft = gridSize / 2;
                     const padRight = w - gridSize / 2;
                     const gap = Math.min(gridSize * 0.4, (padRight - padLeft) * 0.4);
+                    const isPolarized = comp?.isPolarized;
+
                     return (
                         <g>
                             <line x1={padLeft} y1={gridSize / 2} x2={w / 2 - gap} y2={gridSize / 2} stroke="#ccc" strokeWidth="2" />
@@ -241,6 +243,9 @@
                             <line x1={w / 2 + gap} y1={gridSize / 2} x2={padRight} y2={gridSize / 2} stroke="#ccc" strokeWidth="2" />
                             <circle cx={padRight} cy={gridSize / 2} r={2} fill="#9ca3af" />
                             <circle cx={w / 2} cy={gridSize / 2} r={Math.min(gridSize / 2.5, (padRight - padLeft) / 2)} fill="#3b82f6" stroke="#1d4ed8" />
+                            {isPolarized && (
+                                <text x={padLeft + 4} y={gridSize / 2 - 4} fontSize={gridSize * 0.4} fill="#ef4444" fontWeight="bold">+</text>
+                            )}
                         </g>
                     );
                 }
@@ -1006,6 +1011,21 @@
                                         <label className="block"><span className="text-gray-600 block mb-1">部品名 (例: R1)</span><input type="text" value={currentSelectedComponent.name || ''} onChange={e => handleAttributeChange('name', e.target.value)} className="w-full p-1 border rounded" /></label>
                                         <label className="block"><span className="text-gray-600 block mb-1">説明 (例: 10kΩ)</span><input type="text" value={currentSelectedComponent.value || ''} onChange={e => handleAttributeChange('value', e.target.value)} className="w-full p-1 border rounded" /></label>
 
+                                        {/* コンデンサ専用属性 */}
+                                        {currentSelectedComponent.type === 'capacitor' && (
+                                            <div className="pt-1 mt-1 border-t border-indigo-200">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={currentSelectedComponent.isPolarized || false}
+                                                        onChange={e => handleAttributeChange('isPolarized', e.target.checked)}
+                                                        className="rounded text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-gray-700 font-medium">極性あり (+)</span>
+                                                </label>
+                                            </div>
+                                        )}
+
                                         {/* サイズ変更フィールド */}
                                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-indigo-200 mt-2">
                                             <label>
@@ -1189,7 +1209,7 @@
                                                             return (
                                                                 <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => handleComponentDragStart(e, comp.id)} className={selectedTool === 'wire' ? "" : "cursor-move"} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: selectedTool === 'wire' ? 'none' : 'auto' }}>
                                                                     {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
-                                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide)}
+                                                                    {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide, comp)}
                                                                     {showLabels && (
                                                                         <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
                                                                             <g transform={`translate(${w / 2}, ${h / 2})`}>
