@@ -387,6 +387,7 @@
             const [draggedComponent, setDraggedComponent] = useState(null);
             const [draggedWireEndpoint, setDraggedWireEndpoint] = useState(null);
             const [hoveredGrid, setHoveredGrid] = useState(null);
+            const [projectTitle, setProjectTitle] = useState('Untitled Project');
 
             // 作成中の配線ルートタイプ ('HV' | 'VH')
             const [currentWireRouteType, setCurrentWireRouteType] = useState('HV');
@@ -864,9 +865,11 @@
                         setBoardConfig({
                             width: DEFAULT_BOARD_WIDTH,
                             height: DEFAULT_BOARD_HEIGHT,
+                            height: DEFAULT_BOARD_HEIGHT,
                             pitch: DEFAULT_PITCH,
                             gridSize: DEFAULT_GRID_SIZE
                         });
+                        setProjectTitle('Untitled Project');
                         setScale(1.5);
                         setViewSide('front');
                         centerBoard();
@@ -887,12 +890,12 @@
             };
 
             const saveDesign = () => {
-                const data = JSON.stringify({ components, wires, boardConfig, componentSizes, showLabels, wireColors });
+                const data = JSON.stringify({ components, wires, boardConfig, componentSizes, showLabels, wireColors, projectTitle });
                 const blob = new Blob([data], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = 'board-design.json';
+                a.download = `${projectTitle || 'board-design'}.json`;
                 a.click();
             };
 
@@ -923,6 +926,7 @@
                         }
                         if (data.showLabels !== undefined) setShowLabels(data.showLabels);
                         if (data.wireColors) setWireColors(data.wireColors); // 保存された色設定を読み込み
+                        if (data.projectTitle) setProjectTitle(data.projectTitle);
 
                     } catch (err) {
                         openAlert('ファイルの読み込みに失敗しました');
@@ -952,10 +956,17 @@
                     {/* 左サイドバー */}
                     <div className="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10">
                         <div className="p-4 border-b border-gray-200">
-                            <h1 className="text-lg font-bold flex items-center gap-2 text-indigo-600">
+                            <h1 className="text-lg font-bold flex items-center gap-2 text-indigo-600 mb-2">
                                 <Icon d={Icons.Grid3X3} size={20} />
                                 UniBoard Designer
                             </h1>
+                            <input
+                                type="text"
+                                value={projectTitle}
+                                onChange={(e) => setProjectTitle(e.target.value)}
+                                className="w-full text-sm p-1 border border-gray-300 rounded focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                placeholder="プロジェクト名を入力"
+                            />
                         </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-6">
                             {/* 基板設定 */}
