@@ -527,18 +527,7 @@
                                                 <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => { if (!isPrintMode && handleComponentDragStart) handleComponentDragStart(e, comp.id); }} className={!isPrintMode ? "cursor-move" : ""} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: isPrintMode ? 'none' : 'auto' }}>
                                                     {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
                                                     {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide, comp)}
-                                                    {showLabels && (
-                                                        <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
-                                                            <g transform={`translate(${w / 2}, ${h / 2})`}>
-                                                                <g transform={labelTransform}>
-                                                                    <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(10, boardConfig.gridSize * 0.5)} fill="white" className="font-bold drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.name}</text>
-                                                                    {comp.value && (
-                                                                        <text x={0} y={Math.max(10, boardConfig.gridSize * 0.5)} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(8, boardConfig.gridSize * 0.4)} fill="#eee" className="drop-shadow-md select-none pointer-events-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.value}</text>
-                                                                    )}
-                                                                </g>
-                                                            </g>
-                                                        </g>
-                                                    )}
+
                                                 </g>
                                             );
                                         })}
@@ -546,6 +535,34 @@
                                 );
                             }
                         })}
+
+                        {/* Component Labels Overlay */}
+                        {showLabels && (
+                            <g className="component-labels" style={{ pointerEvents: 'none' }}>
+                                {components.map(comp => {
+                                    const offsetX = -boardConfig.gridSize / 2;
+                                    const offsetY = -boardConfig.gridSize / 2;
+                                    const w = comp.width * boardConfig.gridSize;
+                                    const h = comp.height * boardConfig.gridSize;
+                                    const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
+
+                                    return (
+                                        <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`}>
+                                            <g transform={`rotate(${-comp.rotation}, ${w / 2}, ${h / 2})`}>
+                                                <g transform={`translate(${w / 2}, ${h / 2})`}>
+                                                    <g transform={labelTransform}>
+                                                        <text x={0} y={0} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(10, boardConfig.gridSize * 0.5)} fill="white" className="font-bold drop-shadow-md select-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.name}</text>
+                                                        {comp.value && (
+                                                            <text x={0} y={Math.max(10, boardConfig.gridSize * 0.5)} textAnchor="middle" dominantBaseline="middle" fontSize={Math.max(8, boardConfig.gridSize * 0.4)} fill="#eee" className="drop-shadow-md select-none" style={{ textShadow: '0px 0px 3px rgba(0,0,0,0.9)' }}>{comp.value}</text>
+                                                        )}
+                                                    </g>
+                                                </g>
+                                            </g>
+                                        </g>
+                                    );
+                                })}
+                            </g>
+                        )}
 
                         {/* 最前面UI（ワイヤー端点ハンドル） */}
                         {!isPrintMode && (
