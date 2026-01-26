@@ -141,6 +141,7 @@
             Cpu: <><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M15 2v2" /><path d="M15 20v2" /><path d="M2 15h2" /><path d="M2 9h2" /><path d="M20 15h2" /><path d="M20 9h2" /><path d="M9 2v2" /><path d="M9 20v2" /></>,
             Trash2: <><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></>,
             RotateCw: <><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></>,
+            RotateCcw: <><path d="M3 12a9 9 0 1 0 9-9 9.75 0 0 0 6.74 2.74L21 8" /><path d="M21 3v5h-5" /></>,
             Settings: <><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.35a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></>,
             Type: <><polyline points="4 7 4 4 20 4 20 7" /><line x1="9" x2="15" y1="20" y2="20" /><line x1="12" x2="12" y1="4" y2="20" /></>,
             ToggleLeft: <><rect width="20" height="12" x="2" y="6" rx="6" ry="6" /><circle cx="8" cy="12" r="2" /></>,
@@ -428,6 +429,7 @@
             handleComponentDragStart, // optional
             handleWireEndpointDragStart, // optional
             handleWireClick, // optional
+            handleDeviceDown, // optional
             isPrintMode = false
         }) => {
             const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
@@ -435,7 +437,8 @@
 
             // Print Modeのときはイベントハンドラを無効化
             const events = isPrintMode ? {} : {
-                onMouseDown, onMouseMove, onMouseUp, onMouseLeave
+                onMouseDown, onMouseMove, onMouseUp, onMouseLeave,
+                onTouchStart: (e) => handleDeviceDown && handleDeviceDown(e, 'board')
             };
 
             const renderGridHoles = () => {
@@ -454,7 +457,7 @@
             const currentSelectedWire = selectedItem?.type === 'wire' ? wires.find(w => w.id === selectedItem.id) : null;
 
             return (
-                <svg width={totalBoardWidth} height={totalBoardHeight} {...events} className="block" style={{ backgroundColor: '#2d7a4d' }}>
+                <svg width={totalBoardWidth} height={totalBoardHeight} {...events} className="block touch-none" style={{ backgroundColor: '#2d7a4d' }}>
                     <defs>
                         <pattern id="grid" width={boardConfig.gridSize} height={boardConfig.gridSize} patternUnits="userSpaceOnUse"><circle cx={boardConfig.gridSize / 2} cy={boardConfig.gridSize / 2} r={1} fill="#e5e7eb" opacity="0.5" /></pattern>
                     </defs>
@@ -524,7 +527,7 @@
                                             const h = comp.height * boardConfig.gridSize;
                                             const labelTransform = viewSide === 'back' ? `scale(-1, 1)` : '';
                                             return (
-                                                <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => { if (!isPrintMode && handleComponentDragStart) handleComponentDragStart(e, comp.id); }} className={!isPrintMode ? "cursor-move" : ""} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: isPrintMode ? 'none' : 'auto' }}>
+                                                <g key={comp.id} transform={`translate(${comp.x + offsetX}, ${comp.y + offsetY}) rotate(${comp.rotation}, ${boardConfig.gridSize / 2}, ${boardConfig.gridSize / 2})`} onMouseDown={(e) => { if (!isPrintMode && handleComponentDragStart) handleComponentDragStart(e, comp.id); }} onTouchStart={(e) => { if (!isPrintMode && handleDeviceDown) handleDeviceDown(e, 'component', comp.id); }} className={!isPrintMode ? "cursor-move" : ""} style={{ filter: isSelected ? 'drop-shadow(0 0 2px white)' : 'none', pointerEvents: isPrintMode ? 'none' : 'auto' }}>
                                                     {isSelected && <rect x={-2} y={-2} width={w + 4} height={h + 4} fill="none" stroke="#6366f1" strokeWidth="1" strokeDasharray="2,2" rx="2" />}
                                                     {def.render(w, h, boardConfig.gridSize, comp.width, comp.height, viewSide, comp)}
 
@@ -569,11 +572,11 @@
                             <g className="ui-overlay">
                                 {currentSelectedWire && (
                                     <>
-                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')}>
+                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'start')} onTouchStart={(e) => handleDeviceDown(e, 'wireEndpoint', { id: currentSelectedWire.id, type: 'start' })}>
                                             <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
                                             <circle cx={currentSelectedWire.startX * boardConfig.gridSize} cy={currentSelectedWire.startY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
                                         </g>
-                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')}>
+                                        <g className="cursor-move" onMouseDown={(e) => handleWireEndpointDragStart(e, currentSelectedWire.id, 'end')} onTouchStart={(e) => handleDeviceDown(e, 'wireEndpoint', { id: currentSelectedWire.id, type: 'end' })}>
                                             <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill="transparent" />
                                             <circle cx={currentSelectedWire.endX * boardConfig.gridSize} cy={currentSelectedWire.endY * boardConfig.gridSize} r={5} fill="white" stroke={currentSelectedWire.color} strokeWidth={2} />
                                         </g>
@@ -723,6 +726,7 @@
             const [aiSettings, setAiSettings] = useState({ provider: 'openai', apiKey: '' });
             const [isAiSettingsOpen, setIsAiSettingsOpen] = useState(false);
             const [aiAnalysisResult, setAiAnalysisResult] = useState('');
+            const [suggestedCircuit, setSuggestedCircuit] = useState(null);
             const [isAiResultOpen, setIsAiResultOpen] = useState(false);
             const [isAnalyzing, setIsAnalyzing] = useState(false);
 
@@ -771,6 +775,13 @@
             }, [centerBoard]);
 
             // グリッド座標の計算（オフセット考慮）
+            const getClientPos = (e) => {
+                if (e.changedTouches && e.changedTouches.length > 0) {
+                    return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+                }
+                return { x: e.clientX, y: e.clientY };
+            };
+
             const getGridCoords = (clientX, clientY) => {
                 if (!svgRef.current) return { x: 0, y: 0 };
 
@@ -792,6 +803,77 @@
                     x: Math.round(x / boardConfig.gridSize),
                     y: Math.round(y / boardConfig.gridSize),
                 };
+            };
+
+            // Touch Handling State
+            const touchState = useRef({
+                startX: 0, startY: 0,
+                isDragging: false,
+                isPanned: false,
+                activeId: null, // component or wire id being interacted with
+                mode: 'tap' // 'tap' or 'pan' or 'drag'
+            });
+
+            // Unified Handler for Down/Start
+            const handleDeviceDown = (e, type, id) => {
+                const pos = getClientPos(e);
+
+                // タッチイベントの場合はスクロール防止（必要に応じて）
+                if (e.type === 'touchstart') {
+                    // e.preventDefault(); // React synthetic event vs native... mostly handled in CSS touch-action: none
+                }
+
+                if (e.type === 'touchstart') {
+                    touchState.current = {
+                        startX: pos.x,
+                        startY: pos.y,
+                        isDragging: false,
+                        isPanned: false,
+                        activeId: id,
+                        mode: 'tap'
+                    };
+
+                    // タッチ直後は何もしない（タップかドラッグか判定するため）
+                    // ただし、部品やハンドルの場合は即座にドラッグ開始とみなしてOKな場合もあるが、
+                    // スクロール(パン)したい可能性もあるので、Moveで判定する。
+                    // しかし、既存のDndロジックはMouseDownで開始する。
+
+                    if (type === 'component' || type === 'wireEndpoint') {
+                        // 部品・ワイヤーハンドルの場合は、即座にドラッグ扱いにしてDndロジックを呼ぶ
+                        // これにより、指を置いた瞬間から移動できる
+                        const syntheticEvent = {
+                            ...e,
+                            clientX: pos.x,
+                            clientY: pos.y,
+                            button: 0,
+                            stopPropagation: () => { },
+                            preventDefault: () => { }
+                        };
+                        if (type === 'component') handleComponentDragStart(syntheticEvent, id);
+                        else if (type === 'wireEndpoint') handleWireEndpointDragStart(syntheticEvent, id.id, id.type);
+                        touchState.current.mode = 'drag';
+                    } else {
+                        // 背景の場合: パン開始か、ワイヤー作成か
+                        // とりあえずパンとみなす
+                        touchState.current.mode = 'pan';
+                        // handlePanMouseDown 相当のことをするが、右クリックではないので state をセット
+                        isRightDragging.current = true;
+                        lastPanPos.current = { x: pos.x, y: pos.y };
+                        hasPanned.current = false;
+                    }
+                } else {
+                    // Mouse Event -> Pass through to native handlers if attached directly, 
+                    // or handle here if we replace onClick/onMouseDown
+                    // 現在は onMouseDown 等を個別に呼んでいるので、ここでは何もしないか、あるいは
+                    // 全てをここに集約するか。
+                    // 今回は Touch のみここを通すように onTouchStart={e => handleDeviceDown(e, ...)} とする予定。
+                }
+            };
+
+            // Unified Handler for Move
+            const handleDeviceMove = (e) => {
+                // Mouse move is handled by window listener
+                // Touch move needs to be handled here or by window listener
             };
 
             const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -848,7 +930,8 @@
                 }
 
                 if (draggedComponent || draggedWireEndpoint) return;
-                const { x, y } = getGridCoords(e.clientX, e.clientY);
+                const pos = getClientPos(e);
+                const { x, y } = getGridCoords(pos.x, pos.y);
                 if (x < 0 || x > boardConfig.width || y < 0 || y > boardConfig.height) return;
 
                 if (selectedTool === 'wire') {
@@ -888,20 +971,55 @@
 
             useEffect(() => {
                 const handleWindowMouseMove = (e) => {
+                    const pos = getClientPos(e);
                     // パンニング処理（オフセット更新）
-                    if (isRightDragging.current) {
-                        const dx = e.clientX - lastPanPos.current.x;
-                        const dy = e.clientY - lastPanPos.current.y;
+                    if (isRightDragging.current || (touchState.current.mode === 'pan' && e.type === 'touchmove')) {
+                        if (e.type === 'touchmove') {
+                            // Touch Pan
+                            const dx = pos.x - touchState.current.startX;
+                            const dy = pos.y - touchState.current.startY;
+                            // スレッショルド判定（タップ判定用）
+                            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+                                touchState.current.isPanned = true;
+                                setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+                                touchState.current.startX = pos.x;
+                                touchState.current.startY = pos.y;
+                            }
+                        } else {
+                            // Mouse Pan
+                            const dx = pos.x - lastPanPos.current.x;
+                            const dy = pos.y - lastPanPos.current.y;
 
-                        if (dx !== 0 || dy !== 0) {
-                            hasPanned.current = true;
-                            setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-                            lastPanPos.current = { x: e.clientX, y: e.clientY };
+                            if (dx !== 0 || dy !== 0) {
+                                hasPanned.current = true;
+                                setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+                                lastPanPos.current = { x: pos.x, y: pos.y };
+                            }
                         }
                     }
                 };
 
                 const handleWindowMouseUp = (e) => {
+                    // Touch End
+                    if (e.type === 'touchend' || e.type === 'touchcancel') {
+                        if (touchState.current.mode === 'pan') {
+                            if (!touchState.current.isPanned) {
+                                // タップとみなしてクリック処理を実行
+                                // タッチ終了時は座標がないので、開始時の座標を使用
+                                const syntheticEvent = {
+                                    clientX: touchState.current.startX,
+                                    clientY: touchState.current.startY,
+                                    button: 0,
+                                    target: e.target // 必要であれば
+                                };
+                                handleMouseDown(syntheticEvent);
+                            }
+                            touchState.current.mode = 'tap';
+                        }
+                        return;
+                    }
+
+                    // Mouse Up
                     if (isRightDragging.current && e.button === 2) {
                         isRightDragging.current = false;
                         if (!hasPanned.current) {
@@ -919,15 +1037,22 @@
 
                 window.addEventListener('mousemove', handleWindowMouseMove);
                 window.addEventListener('mouseup', handleWindowMouseUp);
+                window.addEventListener('touchmove', handleWindowMouseMove, { passive: false });
+                window.addEventListener('touchend', handleWindowMouseUp);
+                window.addEventListener('touchcancel', handleWindowMouseUp);
 
                 return () => {
                     window.removeEventListener('mousemove', handleWindowMouseMove);
                     window.removeEventListener('mouseup', handleWindowMouseUp);
+                    window.removeEventListener('touchmove', handleWindowMouseMove);
+                    window.removeEventListener('touchend', handleWindowMouseUp);
+                    window.removeEventListener('touchcancel', handleWindowMouseUp);
                 };
             }, [currentWireStart, draggedComponent, draggedWireEndpoint]);
 
             const handleMouseMove = (e) => {
-                const { x, y } = getGridCoords(e.clientX, e.clientY);
+                const pos = getClientPos(e);
+                const { x, y } = getGridCoords(pos.x, pos.y);
                 if (!hoveredGrid || hoveredGrid.x !== x || hoveredGrid.y !== y) {
                     setHoveredGrid({ x, y });
                 }
@@ -1014,6 +1139,7 @@
             }, []);
 
             const addComponent = (typeDef, gridX, gridY) => {
+                saveHistory(); // 履歴保存
                 const x = gridX * boardConfig.gridSize;
                 const y = gridY * boardConfig.gridSize;
                 const prefix = COMPONENT_PREFIXES[typeDef.id] || 'P';
@@ -1029,6 +1155,7 @@
             };
 
             const addWire = (start, end) => {
+                saveHistory(); // 履歴保存
                 const newWire = {
                     id: generateId(),
                     startX: start.x,
@@ -1055,6 +1182,7 @@
             const runAiAnalysis = async () => {
                 setIsAnalyzing(true);
                 setAiAnalysisResult('');
+                setSuggestedCircuit(null);
                 setIsAiResultOpen(true);
 
                 const circuitData = {
@@ -1077,7 +1205,18 @@
                     }))
                 };
 
-                const prompt = `以下のユニバーサル基板の回路設計データ(JSON)を分析し、回路の改善点、配線の最適化（交差の削減、経路短縮）、および一般的なアドバイスを日本語で提供してください。\\n\\n${JSON.stringify(circuitData, null, 2)}`;
+                const prompt = `以下のユニバーサル基板の回路設計データ(JSON)を分析し、回路の改善点、配線の最適化（交差の削減、経路短縮）、および一般的なアドバイスを日本語で提供してください。
+もし、回路の構成(components)や配線(wires)に変更を加える提案がある場合は、回答の最後に以下のJSONフォーマットで、変更後の完全な回路データを含めてください。変更がない場合はJSONを含めないでください。
+
+\`\`\`json
+{
+  "components": [ ... ],
+  "wires": [ ... ]
+}
+\`\`\`
+
+入力データ:
+${JSON.stringify(circuitData, null, 2)}`;
 
                 try {
                     let resultText = '';
@@ -1109,6 +1248,19 @@
                         resultText = data.candidates[0].content.parts[0].text;
                     }
                     setAiAnalysisResult(resultText);
+
+                    // JSON抽出
+                    const jsonMatch = resultText.match(/```json\s*([\s\S]*?)\s*```/);
+                    if (jsonMatch) {
+                        try {
+                            const parsed = JSON.parse(jsonMatch[1]);
+                            if (parsed.components && parsed.wires) {
+                                setSuggestedCircuit(parsed);
+                            }
+                        } catch (e) {
+                            console.error('Failed to parse suggested circuit JSON', e);
+                        }
+                    }
                 } catch (error) {
                     setAiAnalysisResult(`エラーが発生しました: ${error.message}`);
                 } finally {
@@ -1116,8 +1268,72 @@
                 }
             };
 
+            // Undo History
+            const [history, setHistory] = useState([]);
+
+            const saveHistory = () => {
+                setHistory(prev => {
+                    const newHistory = [...prev, { components, wires }];
+                    if (newHistory.length > 50) newHistory.shift(); // 履歴数制限
+                    return newHistory;
+                });
+            };
+
+            const undo = useCallback(() => {
+                setHistory(prev => {
+                    if (prev.length === 0) return prev;
+                    const newHistory = [...prev];
+                    const lastState = newHistory.pop();
+                    setComponents(lastState.components);
+                    setWires(lastState.wires);
+                    setSuggestedCircuit(null); // AI提案状態もリセット
+                    return newHistory;
+                });
+            }, []);
+
+            const applyAiSuggestion = () => {
+                if (!suggestedCircuit) return;
+                openConfirm('現在の設計をAIの提案内容で上書きしますか？\n（元に戻すことはできません）', () => {
+                    saveHistory(); // 履歴保存
+                    // Componentsの復元（ピクセル座標への変換と不足プロパティの補完）
+                    const newComponents = suggestedCircuit.components.map(c => {
+                        const def = Object.values(COMPONENT_DEFINITIONS).find(def => def.id === c.type) || COMPONENT_DEFINITIONS.GENERAL;
+                        return {
+                            id: generateId(), // IDは新規生成（またはAIが保持していればそれを使うが、突合が難しいので新規が無難）
+                            type: c.type,
+                            name: c.name,
+                            value: c.value,
+                            x: c.x * boardConfig.gridSize,
+                            y: c.y * boardConfig.gridSize,
+                            rotation: c.rotation || 0,
+                            width: def.defaultWidth, // デフォルトサイズに戻る制限あり
+                            height: def.defaultHeight
+                        };
+                    });
+
+                    // Wiresの復元
+                    const newWires = suggestedCircuit.wires.map(w => ({
+                        id: generateId(),
+                        startX: w.startX,
+                        startY: w.startY,
+                        endX: w.endX,
+                        endY: w.endY,
+                        side: w.side || 'back',
+                        color: wireColors[w.side || 'back'] || '#000000',
+                        routeType: 'HV'
+                    }));
+
+                    setComponents(newComponents);
+                    setWires(newWires);
+                    setSuggestedCircuit(null);
+                    setIsAiResultOpen(false);
+                    openAlert('AIの提案を適用しました。');
+                });
+            };
+
             const deleteSelected = useCallback(() => {
                 if (!selectedItem) return;
+                saveHistory(); // 履歴保存
                 if (selectedItem.type === 'component') {
                     setComponents(components.filter(c => c.id !== selectedItem.id));
                 } else if (selectedItem.type === 'wire') {
@@ -1128,6 +1344,7 @@
 
             const rotateSelected = useCallback(() => {
                 if (selectedItem?.type !== 'component') return;
+                saveHistory(); // 履歴保存
                 setComponents(components.map(c => {
                     if (c.id === selectedItem.id) {
                         return { ...c, rotation: (c.rotation + 90) % 360 };
@@ -1157,6 +1374,11 @@
             useEffect(() => {
                 const handleKeyDown = (e) => {
                     if (e.target.tagName === 'INPUT') return;
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+                        e.preventDefault();
+                        undo();
+                        return;
+                    }
                     if (e.key === 'Delete' || e.key === 'Backspace') deleteSelected();
                     if (e.key === 'r' || e.key === 'R') rotateSelected();
                     if (e.key === ' ') {
@@ -1172,13 +1394,15 @@
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [deleteSelected, rotateSelected, toggleRouteType]);
+            }, [deleteSelected, rotateSelected, toggleRouteType, undo]);
 
             const handleComponentDragStart = (e, id) => {
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
-                    const { x, y } = getGridCoords(e.clientX, e.clientY);
+                    saveHistory(); // 履歴保存
+                    const pos = getClientPos(e);
+                    const { x, y } = getGridCoords(pos.x, pos.y);
                     const comp = components.find(c => c.id === id);
                     setSelectedItem({ type: 'component', id });
                     if (comp) {
@@ -1219,6 +1443,7 @@
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
+                    saveHistory(); // 履歴保存
                     const targetWire = wires.find(w => w.id === id);
                     if (!targetWire) return;
                     const targetX = type === 'start' ? targetWire.startX : targetWire.endX;
@@ -1591,6 +1816,9 @@
                             <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Space:</strong> 配線ルート切替</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p></div>
                         </div>
                         <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
+                            <button onClick={undo} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="元に戻す (Ctrl+Z)"><Icon d={Icons.RotateCcw} size={16} /> 元に戻す</button>
+                        </div>
+                        <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
                             <button onClick={resetDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="新規作成"><Icon d={Icons.FilePlus} size={16} /> 新規</button>
                             <button onClick={saveDesign} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="保存"><Icon d={Icons.Save} size={16} /> 保存</button>
                             <label className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm cursor-pointer" title="開く"><Icon d={Icons.FolderOpen} size={16} /> 開く<input type="file" accept=".json" onChange={loadDesign} className="hidden" /></label>
@@ -1644,6 +1872,7 @@
                                         handleComponentDragStart={handleComponentDragStart}
                                         handleWireEndpointDragStart={handleWireEndpointDragStart}
                                         handleWireClick={(e, id) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id }); }}
+                                        handleDeviceDown={handleDeviceDown}
                                         isPrintMode={false}
                                     />
                                 </div>
@@ -1745,7 +1974,7 @@
                                 <div className="prose prose-sm max-w-none overflow-y-auto max-h-[60vh]">
                                     <div className="whitespace-pre-wrap">{aiAnalysisResult}</div>
                                 </div>
-                                <div className="flex justify-end border-t pt-2">
+                                <div className="flex justify-between border-t pt-2 items-center">
                                     <button
                                         onClick={() => {
                                             setIsAiResultOpen(false);
@@ -1755,6 +1984,17 @@
                                     >
                                         API設定を変更
                                     </button>
+                                    {suggestedCircuit && (
+                                        <button
+                                            onClick={applyAiSuggestion}
+                                            className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 shadow-sm transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Icon d={Icons.Zap} size={16} />
+                                                <span>AIの提案を適用 (β版)</span>
+                                            </div>
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         )}
