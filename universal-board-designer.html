@@ -1446,6 +1446,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
             }, [deleteSelected, rotateSelected, toggleRouteType, undo]);
 
             const handleComponentDragStart = (e, id) => {
+                if (selectedTool !== 'select') return;
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
