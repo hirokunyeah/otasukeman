@@ -298,7 +298,7 @@
                             <circle cx={padLeft} cy={gridSize / 2} r={2} fill="#9ca3af" />
                             <line x1={w / 2 + gap} y1={gridSize / 2} x2={padRight} y2={gridSize / 2} stroke="#ccc" strokeWidth="2" />
                             <circle cx={padRight} cy={gridSize / 2} r={2} fill="#9ca3af" />
-                            <circle cx={w / 2} cy={gridSize / 2} r={Math.min(gridSize / 2.5, (padRight - padLeft) / 2)} fill="#3b82f6" stroke="#1d4ed8" />
+                            <circle cx={w / 2} cy={gridSize / 2} r={Math.min(gridSize / 2.5, (padRight - padLeft) / 2)} fill={isPolarized ? '#000000' : '#3b82f6'} stroke={isPolarized ? '#000000' : '#1d4ed8'} />
                             {isPolarized && (
                                 <text x={padLeft + 4} y={gridSize / 2 - 4} fontSize={gridSize * 0.4} fill="#ef4444" fontWeight="bold">+</text>
                             )}
@@ -377,17 +377,36 @@
                 name: 'ピンヘッダ',
                 defaultWidth: 4,
                 defaultHeight: 1,
-                render: (w, h, gridSize, gridW, gridH) => {
+                render: (w, h, gridSize, gridW, gridH, viewSide, comp) => {
                     const pins = [];
                     for (let y = 0; y < gridH; y++) {
                         for (let x = 0; x < gridW; x++) {
+                            const labelIndex = y * gridW + x;
+                            const label = comp?.pinLabels?.[labelIndex] || '';
+                            const cx = x * gridSize + gridSize / 2;
+                            const cy = y * gridSize + gridSize / 2;
                             pins.push(
-                                <rect
-                                    key={`${x}-${y}`}
-                                    x={x * gridSize + 2} y={y * gridSize + 2}
-                                    width={gridSize - 4} height={gridSize - 4}
-                                    fill="gold" stroke="orange" strokeWidth="1"
-                                />
+                                <g key={`${x}-${y}`}>
+                                    <rect
+                                        x={x * gridSize + 2} y={y * gridSize + 2}
+                                        width={gridSize - 4} height={gridSize - 4}
+                                        fill="gold" stroke="orange" strokeWidth="1"
+                                    />
+                                    {label && (
+                                        <text
+                                            x={cx}
+                                            y={cy}
+                                            textAnchor="middle"
+                                            dominantBaseline="middle"
+                                            fontSize={Math.max(8, gridSize * 0.35)}
+                                            fill="#111827"
+                                            className="select-none"
+                                            style={{ pointerEvents: 'none' }}
+                                        >
+                                            {label}
+                                        </text>
+                                    )}
+                                </g>
                             );
                         }
                     }
@@ -906,13 +925,41 @@
                 setComponents(prev => prev.map(c => c.id === selectedItem.id ? { ...c, [key]: val } : c));
             };
 
+            const normalizePinLabels = (labels, width, height) => {
+                const total = Math.max(1, Number(width)) * Math.max(1, Number(height));
+                const normalized = Array.isArray(labels) ? labels.slice(0, total) : [];
+                while (normalized.length < total) normalized.push('');
+                return normalized;
+            };
+
+            const updatePinLabel = (index, value) => {
+                if (!selectedItem || selectedItem.type !== 'component') return;
+                setComponents(prev => prev.map(c => {
+                    if (c.id !== selectedItem.id) return c;
+                    if (c.type !== 'jumper') return c;
+                    const width = c.width || 1;
+                    const height = c.height || 1;
+                    const labels = normalizePinLabels(c.pinLabels, width, height);
+                    const nextValue = value ? value.slice(0, 1) : '';
+                    labels[index] = nextValue;
+                    return { ...c, pinLabels: labels };
+                }));
+            };
+
             // 配置済み部品のサイズ変更
             const handleComponentSizeChange = (key, value) => {
                 if (!selectedItem || selectedItem.type !== 'component') return;
                 const newVal = Math.max(1, Number(value));
-                setComponents(prev => prev.map(c =>
-                    c.id === selectedItem.id ? { ...c, [key]: newVal } : c
-                ));
+                setComponents(prev => prev.map(c => {
+                    if (c.id !== selectedItem.id) return c;
+                    const newWidth = key === 'width' ? newVal : c.width;
+                    const newHeight = key === 'height' ? newVal : c.height;
+                    const updated = { ...c, width: newWidth, height: newHeight };
+                    if (updated.type === 'jumper') {
+                        updated.pinLabels = normalizePinLabels(updated.pinLabels, newWidth, newHeight);
+                    }
+                    return updated;
+                }));
             };
 
             // 配線色の変更（現在の面の設定を更新）
@@ -1149,6 +1196,7 @@
                     id: generateId(), type: typeDef.id, x, y,
                     width: typeDef.width, height: typeDef.height, rotation: 0,
                     name: name, value: '',
+                    ...(typeDef.id === 'jumper' ? { pinLabels: normalizePinLabels([], typeDef.width, typeDef.height) } : {})
                 };
                 setComponents([...components, newComp]);
                 setSelectedItem({ type: 'component', id: newComp.id });
@@ -1307,7 +1355,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                             y: c.y * boardConfig.gridSize,
                             rotation: c.rotation || 0,
                             width: def.defaultWidth, // デフォルトサイズに戻る制限あり
-                            height: def.defaultHeight
+                            height: def.defaultHeight,
+                            ...(c.type === 'jumper' ? { pinLabels: normalizePinLabels([], def.defaultWidth, def.defaultHeight) } : {})
                         };
                     });
 
@@ -1397,6 +1446,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
             }, [deleteSelected, rotateSelected, toggleRouteType, undo]);
 
             const handleComponentDragStart = (e, id) => {
+                if (selectedTool !== 'select') return;
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
@@ -1561,7 +1611,18 @@ ${JSON.stringify(circuitData, null, 2)}`;
                             }
                             setBoardConfig(loadedConfig);
                         }
-                        setComponents(data.components || []);
+                        const loadedComponents = (data.components || []).map(comp => {
+                            if (comp.type !== 'jumper') return comp;
+                            const width = comp.width || COMPONENT_DEFINITIONS.JUMPER.defaultWidth;
+                            const height = comp.height || COMPONENT_DEFINITIONS.JUMPER.defaultHeight;
+                            return {
+                                ...comp,
+                                width,
+                                height,
+                                pinLabels: normalizePinLabels(comp.pinLabels, width, height)
+                            };
+                        });
+                        setComponents(loadedComponents);
                         setWires(data.wires || []);
                         if (data.componentSizes) {
                             setComponentSizes(data.componentSizes);
@@ -1594,6 +1655,9 @@ ${JSON.stringify(circuitData, null, 2)}`;
 
             const currentSelectedComponent = selectedItem?.type === 'component' ? components.find(c => c.id === selectedItem.id) : null;
             const currentSelectedWire = selectedItem?.type === 'wire' ? wires.find(w => w.id === selectedItem.id) : null;
+            const currentPinLabels = currentSelectedComponent?.type === 'jumper'
+                ? normalizePinLabels(currentSelectedComponent.pinLabels, currentSelectedComponent.width, currentSelectedComponent.height)
+                : null;
             const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
 
             return (
@@ -1735,6 +1799,24 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                     />
                                                     <span className="text-gray-700 font-medium">極性あり (+)</span>
                                                 </label>
+                                            </div>
+                                        )}
+
+                                        {currentSelectedComponent.type === 'jumper' && (
+                                            <div className="pt-1 mt-1 border-t border-indigo-200">
+                                                <div className="text-gray-700 font-medium mb-1">ピンラベル (1文字)</div>
+                                                <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${currentSelectedComponent.width}, minmax(0, 1fr))` }}>
+                                                    {Array.from({ length: currentSelectedComponent.width * currentSelectedComponent.height }).map((_, index) => (
+                                                        <input
+                                                            key={index}
+                                                            type="text"
+                                                            value={currentPinLabels?.[index] || ''}
+                                                            onChange={e => updatePinLabel(index, e.target.value)}
+                                                            maxLength={1}
+                                                            className="w-full p-1 border rounded text-center"
+                                                        />
+                                                    ))}
+                                                </div>
                                             </div>
                                         )}
 
