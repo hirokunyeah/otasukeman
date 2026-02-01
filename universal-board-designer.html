@@ -278,12 +278,23 @@
             const y2 = wire.endY;
             const segments = [];
 
-            if (routeType === 'VH') {
-                segments.push(normalizeSegment({ wireId: wire.id, side, orientation: 'V', x1, y1, x2: x1, y2 }));
-                segments.push(normalizeSegment({ wireId: wire.id, side, orientation: 'H', x1, y1: y2, x2, y2 }));
+            // シンプルな直線ワイヤー（ルートなし）の場合
+            if (x1 === x2 || y1 === y2) {
+                segments.push(normalizeSegment({ wireId: wire.id, side, 
+                    orientation: x1 === x2 ? 'V' : 'H', 
+                    x1, y1, x2, y2 }));
+            } else if (routeType === 'VH') {
+                // 最初に垂直、次に水平
+                const vSegment = normalizeSegment({ wireId: wire.id, side, orientation: 'V', x1, y1, x2: x1, y2 });
+                if (vSegment.y1 !== vSegment.y2) segments.push(vSegment);
+                const hSegment = normalizeSegment({ wireId: wire.id, side, orientation: 'H', x1: x1, y1: y2, x2, y2 });
+                if (hSegment.x1 !== hSegment.x2) segments.push(hSegment);
             } else {
-                segments.push(normalizeSegment({ wireId: wire.id, side, orientation: 'H', x1, y1, x2, y2: y1 }));
-                segments.push(normalizeSegment({ wireId: wire.id, side, orientation: 'V', x1: x2, y1, x2, y2 }));
+                // 最初に水平、次に垂直（HVがデフォルト）
+                const hSegment = normalizeSegment({ wireId: wire.id, side, orientation: 'H', x1, y1, x2, y2: y1 });
+                if (hSegment.x1 !== hSegment.x2) segments.push(hSegment);
+                const vSegment = normalizeSegment({ wireId: wire.id, side, orientation: 'V', x1: x2, y1, x2, y2 });
+                if (vSegment.y1 !== vSegment.y2) segments.push(vSegment);
             }
 
             return segments;
@@ -431,6 +442,7 @@
             nodes.forEach(node => parent.set(node.id, node.id));
             edges.forEach(edge => union(edge.from, edge.to));
 
+            // ピンノードと同じ座標のその他ノードを接続
             pinNodeIds.forEach(pinId => {
                 const pinNode = nodes.find(n => n.id === pinId);
                 if (!pinNode) return;
@@ -440,6 +452,21 @@
                         union(pinId, node.id);
                     }
                 });
+            });
+
+            // 同じ座標にいるすべてのノード（ピンがない場所での複数ワイヤー終端など）を接続
+            const coordMap = new Map();
+            nodes.forEach(node => {
+                const key = `${node.x},${node.y}`;
+                if (!coordMap.has(key)) coordMap.set(key, []);
+                coordMap.get(key).push(node.id);
+            });
+            coordMap.forEach(nodeIds => {
+                if (nodeIds.length > 1) {
+                    for (let i = 1; i < nodeIds.length; i++) {
+                        union(nodeIds[0], nodeIds[i]);
+                    }
+                }
             });
 
             const netsMap = new Map();
@@ -464,7 +491,7 @@
             return NET_COLORS[netIndex % NET_COLORS.length];
         };
 
-        const getNetDetails = (netId, connectionGraph) => {
+        const getNetDetails = (netId, connectionGraph, comps) => {
             const net = connectionGraph.nets?.find(n => n.id === netId);
             if (!net) return null;
 
@@ -492,7 +519,12 @@
                 pinCount: pinNodes.length,
                 wireNodeCount: wireNodes.length,
                 wireCount: wireIds.size,
-                components: Array.from(componentMap.entries()).map(([compId, pins]) => ({ compId, pins })),
+                components: Array.from(componentMap.entries()).map(([compId, pins]) => {
+                    const comp = comps?.find(c => c.id === compId);
+                    const compName = comp?.name || compId;
+                    const compValue = comp?.value ? ` (${comp.value})` : '';
+                    return { compId, compName: compName + compValue, pins };
+                }),
                 wires: Array.from(wireIds)
             };
         };
@@ -2378,15 +2410,20 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                         {connectionGraph.nets.map((net, idx) => {
                                             const netColor = getNetColor(idx);
                                             const wireCount = netToWireMap.get(net.id)?.wires.length || 0;
+                                            const details = getNetDetails(net.id, connectionGraph, components);
+                                            // 接続されている部品の参照名を取得
+                                            const compNames = details && details.components.length > 0 
+                                                ? details.components.map(c => c.compName).join(', ')
+                                                : '(未接続)';
                                             return (
                                                 <option key={net.id} value={net.id}>
-                                                    {net.id.replace('net', 'Net')} ({net.nodeIds.length}ノード, {wireCount}ワイヤ)
+                                                    {`[`}{compNames}{`]`} - {net.nodeIds.length}ノード, {wireCount}ワイヤ
                                                 </option>
                                             );
                                         })}
                                     </select>
                                     {selectedNetId && (() => {
-                                        const details = getNetDetails(selectedNetId, connectionGraph);
+                                        const details = getNetDetails(selectedNetId, connectionGraph, components);
                                         if (!details) return null;
                                         return (
                                             <div className="text-xs text-blue-700 space-y-1 max-h-40 overflow-y-auto">
@@ -2399,7 +2436,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                         <div className="ml-2">
                                                             {details.components.map((comp, idx) => (
                                                                 <div key={idx} className="text-[10px]">
-                                                                    {comp.compId} (ピン: {comp.pins.join(', ')})
+                                                                    {comp.compName} (ピン: {comp.pins.join(', ')})
                                                                 </div>
                                                             ))}
                                                         </div>
