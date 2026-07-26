@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>忍者修行 — 耳で聞け、体で応えろ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0E1220;        /* 夜の藍墨 */
+    --ink-soft:#1A2136;
+    --washi:#EDE6D6;      /* 和紙 */
+    --washi-dim:#9C9789;
+    --kin:#C9A227;        /* 金 — スコア */
+    --shu:#D93A2B;        /* 朱 — 失敗 */
+    --matsu:#5E8C61;      /* 松葉 — 成功 */
+    --ring:#2C4770;       /* 藍 — リング下地 */
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;}
+  body{
+    background:var(--ink);
+    color:var(--washi);
+    font-family:'Zen Kaku Gothic New',sans-serif;
+    user-select:none;-webkit-user-select:none;
+    touch-action:manipulation;
+    overscroll-behavior:none;
+  }
+  .screen{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;text-align:center;
+  }
+  .hidden{display:none;}
+
+  /* ---------- タイトル ---------- */
+  #title-kanji{
+    font-family:'Yuji Syuku',serif;
+    font-size:min(38vw,180px);
+    line-height:1;
+    color:var(--washi);
+    text-shadow:0 0 60px rgba(201,162,39,.25);
+  }
+  #title-sub{
+    margin-top:8px;
+    letter-spacing:.5em;
+    text-indent:.5em;
+    font-size:14px;
+    color:var(--washi-dim);
+  }
+  .rules{
+    margin-top:28px;
+    font-size:13px;
+    line-height:2.1;
+    color:var(--washi-dim);
+    max-width:320px;
+  }
+  .rules b{color:var(--washi);font-weight:500;}
+  #start-btn{
+    margin-top:32px;
+    font-family:'Yuji Syuku',serif;
+    font-size:24px;
+    color:var(--ink);
+    background:var(--washi);
+    border:none;border-radius:999px;
+    padding:16px 56px;
+    letter-spacing:.3em;text-indent:.3em;
+    cursor:pointer;
+  }
+  #start-btn:active{transform:scale(.96);}
+  #perm-note{margin-top:14px;font-size:11px;color:var(--washi-dim);}
+
+  /* ---------- プレイ画面 ---------- */
+  #hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;justify-content:space-between;align-items:baseline;
+    padding:20px 24px;
+    font-size:13px;color:var(--washi-dim);
+  }
+  #rank-badge{
+    font-family:'Yuji Syuku',serif;
+    font-size:15px;
+    display:inline-block;
+  }
+  #rank-badge.rank-up{ animation:rank-pop 1.1s ease-out; }
+  @keyframes rank-pop{
+    0%{ transform:scale(1); text-shadow:0 0 0 rgba(201,162,39,0); }
+    25%{ transform:scale(1.5); text-shadow:0 0 18px rgba(201,162,39,.9); color:#F4EDE0; }
+    100%{ transform:scale(1); text-shadow:0 0 0 rgba(201,162,39,0); }
+  }
+  #score{
+    font-family:'Yuji Syuku',serif;
+    font-size:34px;color:var(--kin);
+    line-height:1;
+  }
+  #stage-wrap{position:relative;width:min(80vw,340px);height:min(80vw,340px);}
+  #ring{position:absolute;inset:0;transform:rotate(-90deg);}
+  #ring circle{fill:none;stroke-width:7;stroke-linecap:round;}
+  #ring .base{stroke:var(--ring);opacity:.35;}
+  #ring .left{stroke:var(--washi);transition:stroke .15s;}
+  #command-kanji{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Yuji Syuku',serif;
+    font-size:min(46vw,190px);
+    line-height:1;
+  }
+  #status-line{
+    position:absolute;bottom:40px;left:0;right:0;
+    text-align:center;font-size:13px;color:var(--washi-dim);
+    letter-spacing:.2em;
+  }
+  .flash-ok #ring .left{stroke:var(--matsu);}
+  .flash-ok #command-kanji{color:var(--matsu);}
+  .flash-ng{animation:shake-ng .4s;}
+  .flash-ng #command-kanji{color:var(--shu);}
+  @keyframes shake-ng{
+    0%,100%{transform:translateX(0);}
+    20%{transform:translateX(-10px);}
+    40%{transform:translateX(10px);}
+    60%{transform:translateX(-6px);}
+    80%{transform:translateX(6px);}
+  }
+
+  /* ---------- 結果 ---------- */
+  #result-label{letter-spacing:.4em;text-indent:.4em;font-size:14px;color:var(--washi-dim);}
+  #result-score{
+    font-family:'Yuji Syuku',serif;
+    font-size:min(34vw,150px);
+    color:var(--kin);line-height:1.2;
+  }
+  #result-rank{font-family:'Yuji Syuku',serif;font-size:26px;margin-top:4px;}
+  #best-line{margin-top:12px;font-size:13px;color:var(--washi-dim);}
+  #retry-btn{
+    margin-top:36px;
+    font-family:'Yuji Syuku',serif;
+    font-size:20px;color:var(--washi);
+    background:none;border:1.5px solid var(--washi);border-radius:999px;
+    padding:14px 48px;letter-spacing:.3em;text-indent:.3em;cursor:pointer;
+  }
+  #retry-btn:active{transform:scale(.96);}
+
+  @media (prefers-reduced-motion: reduce){
+    .flash-ng{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<!-- タイトル -->
+<div class="screen" id="scr-title">
+  <div id="title-kanji">忍</div>
+  <div id="title-sub">耳で聞け、体で応えろ</div>
+  <div class="rules">
+    音声の指令に、端末で応える。<br>
+    <b>「振れ」</b>…端末を振る　<b>「止まれ」</b>…動くな<br>
+    <b>「右」「左」</b>…その向きに傾ける<br>
+    <b>「叫べ」</b>…声を出す　<b>「打て」</b>…画面を叩く<br>
+    間に合わねば、それまで。
+  </div>
+  <button id="start-btn">入門</button>
+  <div id="perm-note">音とセンサーの許可を求めます(音量オンで)</div>
+</div>
+
+<!-- プレイ -->
+<div class="screen hidden" id="scr-play">
+  <div id="hud">
+    <div>段 <span id="level">1</span><span id="rank-badge" style="margin-left:8px;color:var(--kin);"></span></div>
+    <div id="score">0</div>
+  </div>
+  <div id="stage-wrap">
+    <svg id="ring" viewBox="0 0 100 100">
+      <circle class="base" cx="50" cy="50" r="46"></circle>
+      <circle class="left" id="ring-left" cx="50" cy="50" r="46"
+              stroke-dasharray="289" stroke-dashoffset="0"></circle>
+    </svg>
+    <div id="command-kanji"></div>
+  </div>
+  <div id="status-line">指令を待て</div>
+</div>
+
+<!-- 結果 -->
+<div class="screen hidden" id="scr-result">
+  <div id="result-label">討たれた</div>
+  <div id="result-score">0</div>
+  <div id="result-rank"></div>
+  <div id="best-line"></div>
+  <button id="retry-btn">再修行</button>
+</div>
+
+<script>
+(() => {
+  // ===== 状態 =====
+  const S = {
+    playing:false, score:0, best:0,
+    micOK:false, motionOK:false,
+    command:null, phase:'idle',     // idle | speaking | waiting
+    deadline:0, timeLimit:0,
+    tiltArmed:false,
+    rafId:0,
+  };
+
+  // ===== DOM =====
+  const $ = id => document.getElementById(id);
+  const scrTitle=$('scr-title'), scrPlay=$('scr-play'), scrResult=$('scr-result');
+  const kanjiEl=$('command-kanji'), ringLeft=$('ring-left'), stageWrap=$('stage-wrap');
+  const scoreEl=$('score'), levelEl=$('level'), statusEl=$('status-line'), rankBadgeEl=$('rank-badge');
+  const RING_LEN = 289; // 2πr (r=46)
+
+  // ===== 指令定義 =====
+  const COMMANDS = [
+    {id:'shake',  kanji:'振', say:'振れ!',   needMic:false},
+    {id:'freeze', kanji:'止', say:'止まれ!', needMic:false},
+    {id:'right',  kanji:'右', say:'右!',     needMic:false},
+    {id:'left',   kanji:'左', say:'左!',     needMic:false},
+    {id:'shout',  kanji:'叫', say:'叫べ!',   needMic:true},
+    {id:'tap',    kanji:'打', say:'打て!',   needMic:false},
+  ];
+
+  // ===== 音声合成 =====
+  const hasSpeech = (typeof window!=='undefined') &&
+    ('speechSynthesis' in window) &&
+    (typeof SpeechSynthesisUtterance !== 'undefined');
+
+  let jaVoice = null;
+  function pickVoice(){
+    if(!hasSpeech) return;
+    const vs = speechSynthesis.getVoices();
+    jaVoice = vs.find(v=>v.lang && v.lang.startsWith('ja')) || null;
+  }
+  if(hasSpeech){
+    speechSynthesis.onvoiceschanged = pickVoice;
+    pickVoice();
+  }
+
+  function speak(text, onend){
+    if(!hasSpeech){
+      // 音声合成が使えない環境: 少し間を置いてそのまま進行(表示は漢字のみ)
+      if(onend) setTimeout(onend, 500);
+      return;
+    }
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang='ja-JP';
+    if(jaVoice) u.voice=jaVoice;
+    u.rate=1.15; u.pitch=1.0; u.volume=1.0;
+    let done=false;
+    const fin=()=>{ if(!done){done=true; onend&&onend();} };
+    u.onend=fin; u.onerror=fin;
+    // 保険: onendが来ない環境向けタイムアウト
+    setTimeout(fin, 400 + text.length*220);
+    speechSynthesis.speak(u);
+  }
+
+  // ===== 効果音 (WebAudio) =====
+  let AC=null;
+  function audioInit(){
+    if(!AC){ AC = new (window.AudioContext||window.webkitAudioContext)(); }
+    if(AC.state==='suspended') AC.resume();
+  }
+  function beep(freq, dur, type='sine', gain=0.25, when=0){
+    if(!AC) return;
+    const t = AC.currentTime + when;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g).connect(AC.destination);
+    o.start(t); o.stop(t+dur);
+  }
+  const sndOK  = ()=>{ beep(880,.09,'square',.15); beep(1320,.12,'square',.12,.07); };
+  const sndNG  = ()=>{ beep(160,.5,'sawtooth',.3); beep(110,.6,'sawtooth',.25,.05); };
+  const chimeRankUp = ()=>{
+    // 昇格時の華やかな上昇アルペジオ
+    [660,880,1100,1320].forEach((f,i)=> beep(f,.22,'sine',.14,i*0.09));
+  };
+  const vibrate = ms => { if(navigator.vibrate) navigator.vibrate(ms); };
+
+  // ===== センサー値 =====
+  const sensor = { accel:0, gamma:0, vol:0 };
+
+  window.addEventListener('devicemotion', e=>{
+    const a = e.acceleration && e.acceleration.x!==null
+      ? e.acceleration
+      : e.accelerationIncludingGravity;
+    if(!a) return;
+    let m = Math.hypot(a.x||0, a.y||0, a.z||0);
+    if(a===e.accelerationIncludingGravity) m = Math.abs(m-9.8);
+    // 軽く平滑化しつつ、ピークは残す
+    sensor.accel = Math.max(m, sensor.accel*0.85);
+  });
+
+  window.addEventListener('deviceorientation', e=>{
+    if(e.gamma===null) return;
+    // 画面の向きに合わせて左右を補正
+    let g = e.gamma;
+    const ang = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    if(ang===90)  g = e.beta;
+    if(ang===-90 || ang===270) g = -e.beta;
+    sensor.gamma = g;
+  });
+
+  // マイク
+  // 注意: stream と src はグローバルに保持しないと
+  // Android Chrome が GC で破棄して無音になる
+  let analyser=null, micBuf=null, micStream=null, micSrc=null;
+  async function micInit(){
+    try{
+      micStream = await navigator.mediaDevices.getUserMedia({audio:{
+        echoCancellation:false,   // 叫び声を削られないように
+        noiseSuppression:false,
+        autoGainControl:true
+      }});
+      if(AC.state==='suspended') await AC.resume();
+      micSrc = AC.createMediaStreamSource(micStream);
+      analyser = AC.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
+      micBuf = new Uint8Array(analyser.fftSize);
+      micSrc.connect(analyser);
+      S.micOK = true;
+    }catch(err){ S.micOK = false; }
+  }
+  function readVol(){
+    if(!analyser) return 0;
+    analyser.getByteTimeDomainData(micBuf);
+    let sum=0;
+    for(let i=0;i<micBuf.length;i++){ const d=(micBuf[i]-128)/128; sum+=d*d; }
+    return Math.sqrt(sum/micBuf.length); // RMS 0〜1
+  }
+
+  // タップ
+  let tapped=false;
+  const onTap = ()=>{ if(S.phase==='waiting') tapped=true; };
+  document.addEventListener('touchstart', onTap, {passive:true});
+  document.addEventListener('mousedown', onTap);
+
+  // ===== ゲーム進行 =====
+  const THRESH = { shake:14, still:3.2, tilt:35, tiltNeutral:22, shout:0.09 };
+
+  function currentLimit(){
+    // 3.0秒からじわじわ縮み、1.2秒に限りなく近づく(急に頭打ちにならない)
+    const MAXT=3.0, MINT=1.2, DECAY=0.93; // DECAYが小さいほど早く縮む
+    return MINT + (MAXT-MINT) * Math.pow(DECAY, S.score);
+  }
+  function level(){ return 1 + Math.floor(S.score/5); }
+
+  function nextCommand(){
+    if(!S.playing) return;
+    const pool = COMMANDS.filter(c =>
+      (!c.needMic || S.micOK) &&
+      (S.motionOK || !['shake','freeze','right','left'].includes(c.id)) &&
+      (!S.command || c.id!==S.command.id)
+    );
+    S.command = pool[Math.floor(Math.random()*pool.length)];
+    S.phase='speaking';
+    kanjiEl.textContent = S.command.kanji;
+    kanjiEl.style.color = 'var(--washi)';
+    stageWrap.classList.remove('flash-ok','flash-ng');
+    ringLeft.style.strokeDashoffset = 0;
+    statusEl.textContent = '';
+
+    speak(S.command.say, ()=>{
+      if(!S.playing) return;
+      // 判定リセット
+      sensor.accel=0; tapped=false;
+      S.tiltArmed = Math.abs(sensor.gamma) < THRESH.tiltNeutral;
+      S.timeLimit = currentLimit()*1000;
+      S.deadline = performance.now() + S.timeLimit;
+      S.phase='waiting';
+    });
+  }
+
+  function judge(now){
+    const c = S.command; if(!c) return null;
+
+    // ジェスチャー検出(今この瞬間、何が起きているか)
+    const gShake = sensor.accel > THRESH.shake;
+    const gTap   = tapped;
+    const gShout = readVol() > THRESH.shout;
+    let gRight=false, gLeft=false;
+    if(!S.tiltArmed){
+      // 発話直後の傾きが残っていないか確認してから判定を始める
+      if(Math.abs(sensor.gamma) < THRESH.tiltNeutral) S.tiltArmed=true;
+    }else{
+      gRight = sensor.gamma >  THRESH.tilt;
+      gLeft  = sensor.gamma < -THRESH.tilt;
+    }
+
+    if(c.id==='freeze'){
+      if(gShake||gTap||gShout||gRight||gLeft) return 'ng'; // 何かしたら即アウト
+      return now >= S.deadline ? 'ok' : null;              // 何もせず耐え切れば成功
+    }
+
+    // 正解の動作
+    const correct = {shake:gShake, tap:gTap, shout:gShout, right:gRight, left:gLeft}[c.id];
+    if(correct) return 'ok';
+
+    // 指令と違う動作をしたら即アウト
+    const wrong =
+      (c.id!=='shake' && gShake) ||
+      (c.id!=='tap'   && gTap)   ||
+      (c.id!=='shout' && gShout) ||
+      (c.id!=='right' && gRight) ||
+      (c.id!=='left'  && gLeft);
+    if(wrong) return 'ng';
+
+    return now >= S.deadline ? 'ng' : null;               // 何もしないまま時間切れもアウト
+  }
+
+  function loop(now){
+    if(!S.playing) return;
+    if(S.phase==='waiting'){
+      const remain = Math.max(0, S.deadline-now);
+      ringLeft.style.strokeDashoffset = RING_LEN * (1 - remain/S.timeLimit);
+      if(S.command && S.command.id==='shout'){
+        const v = readVol();
+        const pct = Math.min(100, Math.round(v/THRESH.shout*100));
+        statusEl.textContent = '声量 ' + '■'.repeat(Math.floor(pct/10)).padEnd(10,'□') + ' ' + pct + '%';
+      }
+      const r = judge(now);
+      if(r==='ok'){ onSuccess(); }
+      else if(r==='ng'){ onFail(); return; }
+    }
+    S.rafId = requestAnimationFrame(loop);
+  }
+
+  function onSuccess(){
+    S.phase='idle';
+    statusEl.textContent='';
+    S.score++;
+    scoreEl.textContent = S.score;
+    levelEl.textContent = level();
+    sndOK(); vibrate(30);
+    stageWrap.classList.add('flash-ok');
+
+    // 称号の昇格を検知
+    let nextDelay = 420;
+    const newRank = rank(S.score);
+    if(newRank !== S.currentRank){
+      S.currentRank = newRank;
+      rankBadgeEl.textContent = '・' + newRank;
+      rankBadgeEl.classList.remove('rank-up');
+      void rankBadgeEl.offsetWidth; // アニメーション再生のための強制リフロー
+      rankBadgeEl.classList.add('rank-up');
+      chimeRankUp();
+      vibrate([20,40,20,40,60]);
+      speak(newRank + '、認めた。');
+      nextDelay = 1600; // 昇格の読み上げが次の指令に遮られないよう間を空ける
+    }
+
+    setTimeout(nextCommand, nextDelay);
+  }
+
+  function onFail(){
+    S.playing=false; S.phase='idle';
+    cancelAnimationFrame(S.rafId);
+    sndNG(); vibrate([80,50,120]);
+    stageWrap.classList.add('flash-ng');
+    setTimeout(showResult, 700);
+  }
+
+  // ===== 画面遷移 =====
+  function show(scr){
+    [scrTitle,scrPlay,scrResult].forEach(s=>s.classList.add('hidden'));
+    scr.classList.remove('hidden');
+  }
+
+  function rank(score){
+    if(score>=40) return '影';
+    if(score>=25) return '上忍';
+    if(score>=15) return '中忍';
+    if(score>=8)  return '下忍';
+    return '見習い';
+  }
+
+  function showResult(){
+    S.best = Math.max(S.best, S.score);
+    try{
+      const stored = +localStorage.getItem('ninja_best')||0;
+      S.best = Math.max(S.best, stored);
+      localStorage.setItem('ninja_best', S.best);
+    }catch(e){}
+    $('result-score').textContent = S.score;
+    $('result-rank').textContent = '位 — ' + rank(S.score);
+    $('best-line').textContent = '最高記録 ' + S.best;
+    show(scrResult);
+    speak('やられた。スコア、' + S.score + '。');
+  }
+
+  async function startGame(){
+    audioInit();
+    // 音声合成のロック解除(iOS)
+    speak(' ');
+
+    // iOS: センサー許可
+    if(typeof DeviceMotionEvent!=='undefined' && DeviceMotionEvent.requestPermission){
+      try{
+        const p1 = await DeviceMotionEvent.requestPermission();
+        S.motionOK = (p1==='granted');
+        if(DeviceOrientationEvent.requestPermission){
+          await DeviceOrientationEvent.requestPermission();
+        }
+      }catch(e){ S.motionOK=false; }
+    }else{
+      S.motionOK = ('ondevicemotion' in window);
+    }
+
+    if(!S.micOK) await micInit();
+
+    S.playing=true; S.score=0; S.command=null; S.currentRank='見習い';
+    scoreEl.textContent='0'; levelEl.textContent='1';
+    rankBadgeEl.textContent='';
+    show(scrPlay);
+
+    const notes=[];
+    if(!hasSpeech) notes.push('音声合成が使えぬ。漢字の指令を見よ');
+    if(!S.motionOK) notes.push('センサー不可: 打て/叫べのみ');
+    else if(!S.micOK) notes.push('マイク不可: 「叫べ」は出ません');
+    statusEl.textContent = notes.join(' / ') || '指令を待て';
+
+    speak('修行、開始。', ()=>{ setTimeout(nextCommand, 500); });
+    S.rafId = requestAnimationFrame(loop);
+  }
+
+  $('start-btn').addEventListener('click', startGame);
+  $('retry-btn').addEventListener('click', startGame);
+})();
+</script>
+</body>
+</html>
