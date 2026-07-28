@@ -1112,6 +1112,10 @@
     ];
     const draggableClasses = [...draggableClassesFront, ...draggableClassesBack];
 
+    function getAllDraggableClasses() {
+      return [...draggableClasses, ...customElements.map(el => el.id)];
+    }
+
     const classNameToLabel = {
       'logo': '会社ロゴ画像 (表面)',
       'dept-info': '部署・役職',
@@ -1143,7 +1147,7 @@
       }
 
       let targetClass = null;
-      for (const cls of draggableClasses) {
+      for (const cls of getAllDraggableClasses()) {
         if (e.target.closest('.' + cls)) {
           targetClass = cls;
           break;
@@ -1184,7 +1188,7 @@
     }
 
     function updateLayerStackHighlight() {
-      for (const c of draggableClasses) {
+      for (const c of getAllDraggableClasses()) {
         const el = document.getElementById(`layer_item_${c}`);
         if (el) {
           const isSelected = c === selectedElementClass;
@@ -1221,7 +1225,7 @@
       e.preventDefault();
       if (!draggedStackLayer || draggedStackLayer === targetCls) return;
 
-      const items = draggableClasses.map((cls, idx) => {
+      const items = getAllDraggableClasses().map((cls, idx) => {
         return { cls, z: elementZIndexes[cls] || 0, originalIndex: idx };
       });
       items.sort((a, b) => b.z !== a.z ? b.z - a.z : a.originalIndex - b.originalIndex);
@@ -1417,7 +1421,7 @@
 
       let dynamicCss = '';
       const pxToScale = (frameW / (91 * 3.77953));
-      for (const cls of draggableClasses) {
+      for (const cls of getAllDraggableClasses()) {
         if (elementOffsets[cls] || elementZIndexes[cls] !== undefined) {
           const offsetX = elementOffsets[cls] ? elementOffsets[cls].x * pxToScale : 0;
           const offsetY = elementOffsets[cls] ? elementOffsets[cls].y * pxToScale : 0;
