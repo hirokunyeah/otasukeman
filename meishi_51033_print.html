@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <title>A-one 51033 名刺印刷</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: #e8e8e8;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== トップバー ===== */
+    .topbar {
+      background: #1a1a2e;
+      color: white;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    .topbar h1 {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+      letter-spacing: 1px;
+    }
+
+    .topbar .note {
+      font-size: 10px;
+      color: #aaa;
+    }
+
+    .print-btn {
+      padding: 7px 20px;
+      background: #005bac;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .print-btn:hover {
+      background: #0047a0;
+    }
+
+    /* ===== メインレイアウト ===== */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ===== 左：入力フォーム ===== */
+    .form-panel {
+      width: 280px;
+      flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #ddd;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .form-panel h2 {
+      font-size: 11px;
+      font-weight: 700;
+      color: #005bac;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 2px solid #005bac;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+      margin-top: 16px;
+    }
+
+    .form-panel h2:first-child {
+      margin-top: 0;
+    }
+
+    .form-row {
+      margin-bottom: 8px;
+    }
+
+    .form-row label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      color: #666;
+      margin-bottom: 3px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    .form-row input,
+    .form-row textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: inherit;
+      outline: none;
+      transition: border 0.2s;
+      color: #222;
+    }
+
+    .form-row input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+    }
+
+    .form-row input:focus,
+    .form-row textarea:focus {
+      border-color: #005bac;
+    }
+
+    .form-row textarea {
+      resize: vertical;
+      min-height: 40px;
+    }
+
+    /* ===== 右：プレビュー ===== */
+    .preview-panel {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    .sheet-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sheet-label {
+      font-size: 11px;
+      color: #666;
+      font-family: sans-serif;
+    }
+
+    /* A4 50%縮小表示 */
+    .sheet-outer {
+      transform-origin: top left;
+      transform: scale(0.5);
+      margin-bottom: calc(-297mm * 0.5);
+      margin-right: calc(-210mm * 0.5);
+    }
+
+    .sheet {
+      width: 210mm;
+      height: 297mm;
+      background: white;
+      position: relative;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .cards-grid {
+      position: absolute;
+      top: 11mm;
+      left: 14mm;
+      display: grid;
+      grid-template-columns: repeat(2, 91mm);
+      grid-template-rows: repeat(5, 55mm);
+      gap: 0;
+    }
+
+    .card {
+      width: 91mm;
+      height: 55mm;
+      overflow: hidden;
+      border: 0.3px dashed #ccc;
+      position: relative;
+    }
+
+    .card-front,
+    .card-back {
+      width: 100%;
+      height: 100%;
+      padding: 0mm 5mm 5mm;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      position: relative;
+      z-index: 0;
+    }
+
+    .logo,
+    .logo-en {
+      margin-bottom: 2mm;
+    }
+
+    .card-front .logo {
+      margin-top: 1.5mm;
+    }
+
+    .card-back .logo-en {
+      margin-top: 2mm;
+      margin-bottom: 0.5mm;
+    }
+
+    .logo img,
+    .logo-en img {
+      height: 10mm;
+      width: auto;
+    }
+
+    /* テキスト左端をロゴの「N」文字に揃える */
+    /* ロゴ表示幅≒30.4mm, N開始=50% → 15.2mm。カードpadding-left=5mm → indent=15.2mm */
+    .text-indent {
+      padding-left: 15.2mm;
+    }
+
+    .dept-info {
+      font-size: 2.2mm;
+      color: #333;
+      line-height: 1.4;
+      margin-bottom: 0.5mm;
+      padding-left: 15.2mm;
+    }
+
+    .dept-info div {
+      display: flex;
+      gap: 1px;
+    }
+
+    .num {
+      font-size: 1.8mm;
+      color: #666;
+      min-width: 10px;
+      flex-shrink: 0;
+    }
+
+    .name-block {
+      margin-top: auto;
+      padding-left: 15.2mm;
+    }
+
+    .name-ja {
+      font-family: 'Noto Serif JP', serif;
+      font-size: 5.8mm;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #111;
+      line-height: 1.1;
+    }
+
+    .cert-block {
+      position: absolute;
+      right: 4mm;
+      top: 12mm;
+      display: flex;
+      gap: 1.5mm;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .cert-block img {
+      height: 9mm;
+      width: auto;
+    }
+
+    .divider,
+    .divider-en {
+      border: none;
+      border-top: 0.3px solid #ddd;
+      margin: 1mm 0 1mm;
+      margin-left: 15.2mm;
+    }
+
+    .company-name-ja {
+      font-weight: 700;
+      font-size: 2.4mm;
+      color: #111;
+      margin-top: 1.5mm;
+      margin-bottom: 1mm;
+      padding-left: 15.2mm;
+    }
+
+    .contact-info {
+      font-size: 1.9mm;
+      color: #333;
+      line-height: 1.4;
+      padding-left: 15.2mm;
+    }
+
+    .footer-note {
+      text-align: center;
+      font-size: 1.6mm;
+      color: #888;
+      margin-top: 1mm;
+    }
+
+    .cert-logos {
+      display: flex;
+      gap: 2.5mm;
+      align-items: center;
+      padding-left: 15.2mm;
+      margin-top: auto;
+      padding-bottom: 1mm;
+      flex-shrink: 0;
+    }
+
+    .cert-logos img {
+      height: 9mm;
+      width: auto;
+    }
+
+    .name-en {
+      font-size: 4.4mm;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 1mm;
+      padding-left: 15.2mm;
+    }
+
+    .dept-en {
+      font-size: 2.2mm;
+      color: #333;
+      line-height: 1.4;
+      margin-bottom: 0.5mm;
+      padding-left: 15.2mm;
+    }
+
+    .dept-en span {
+      display: flex;
+      gap: 3px;
+      align-items: flex-start;
+    }
+
+    .company-en {
+      font-weight: 700;
+      font-size: 2.6mm;
+      margin-top: 1.5mm;
+      margin-bottom: 1mm;
+      letter-spacing: 0.5px;
+      padding-left: 15.2mm;
+    }
+
+    .contact-en {
+      font-size: 2.0mm;
+      color: #333;
+      line-height: 1.4;
+      padding-left: 15.2mm;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.8mm;
+      height: 2.8mm;
+      background: #005bac;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 1.5mm;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+
+    /* ===== 印刷 ===== */
+    @media print {
+      @page {
+        size: A4;
+        margin: 0;
+      }
+
+      body {
+        background: white;
+        display: block;
+        height: auto;
+        overflow: visible;
+      }
+
+      .topbar,
+      .form-panel {
+        display: none;
+      }
+
+      .main {
+        display: block;
+      }
+
+      .preview-panel {
+        padding: 0;
+        display: block;
+        overflow: visible;
+      }
+
+      .sheet-wrap {
+        display: block !important;
+      }
+
+      .sheet-label {
+        display: none;
+      }
+
+      .sheet-outer {
+        transform: none !important;
+        margin: 0 !important;
+      }
+
+      .sheet {
+        width: 210mm;
+        height: 297mm;
+        box-shadow: none;
+        page-break-after: always;
+      }
+
+      .sheet:last-of-type {
+        page-break-after: avoid;
+      }
+
+      .card {
+        border: none;
+      }
+    }
+
+    /* ===== ズームモーダル ===== */
+    .zoom-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px;
+    }
+
+    .zoom-overlay.open {
+      display: flex;
+    }
+
+    .zoom-close {
+      position: absolute;
+      top: 16px;
+      right: 20px;
+      background: none;
+      border: none;
+      color: white;
+      font-size: 28px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .zoom-tabs {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .zoom-tab {
+      padding: 7px 24px;
+      border: 2px solid #fff;
+      border-radius: 20px;
+      background: transparent;
+      color: white;
+      font-size: 13px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .zoom-tab.active {
+      background: white;
+      color: #1a1a2e;
+      font-weight: 700;
+    }
+
+    #zoomFrame {
+      border: none;
+      background: white;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+      border-radius: 3px;
+      display: block;
+      flex-shrink: 0;
+    }
+
+    @media screen {
+
+      .card .logo:hover,
+      .card .dept-info:hover,
+      .card .cert-block:hover,
+      .card .name-block:hover,
+      .card .divider:hover,
+      .card .company-name-ja:hover,
+      .card .contact-info:hover,
+      .card .footer-note:hover,
+      .card .name-en:hover,
+      .card .dept-en:hover,
+      .card .company-en:hover,
+      .card .contact-en:hover,
+      .card .custom-el:hover {
+        outline: 1px dashed #005bac;
+        cursor: move;
+        background: rgba(0, 91, 172, 0.05);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="topbar">
+    <h1>A-one 51033 名刺印刷 &nbsp;|&nbsp; 2列×5段 10枚/シート</h1>
+    <span class="note">印刷設定：余白なし・100%・A4</span>
+    <button class="print-btn" onclick="openZoom()">🔍 ズームプレビュー</button>
+    <button class="print-btn" id="btnUndo" onclick="undoLayout()" style="opacity:0.5; background:#6c757d;" disabled>↩️
+      元に戻す</button>
+    <button class="print-btn" onclick="resetLayout()" style="background:#dc3545;">🔄 配置リセット</button>
+    <button class="print-btn" onclick="exportData()">📤 エクスポート</button>
+    <label class="print-btn" style="cursor:pointer;">📥 インポート<input type="file" accept=".json"
+        onchange="importData(event)" style="display:none;"></label>
+    <button class="print-btn" onclick="window.print()">🖨️ 印刷する</button>
+  </div>
+
+  <div class="main">
+
+    <!-- ズームモーダル -->
+    <div class="zoom-overlay" id="zoomOverlay" onclick="closeZoomOutside(event)">
+      <button class="zoom-close" onclick="closeZoom()">✕</button>
+      <div class="zoom-tabs">
+        <button class="zoom-tab active" id="tabFront" onclick="switchTab('front')">表面（日本語）</button>
+        <button class="zoom-tab" id="tabBack" onclick="switchTab('back')">裏面（English）</button>
+      </div>
+      <iframe id="zoomFrame" scrolling="no"></iframe>
+    </div>
+
+    <!-- 入力フォーム -->
+    <div class="form-panel">
+      <!-- 表示面切り替えタブ -->
+      <div style="display:flex; gap:8px; margin-bottom:16px;">
+        <button id="sideTabFront" onclick="switchTab('front')"
+          style="padding:10px; flex:1; background:#005bac; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">表面
+          (日本語)</button>
+        <button id="sideTabBack" onclick="switchTab('back')"
+          style="padding:10px; flex:1; background:#f0f8ff; color:#005bac; border:1px solid #005bac; border-radius:4px; cursor:pointer; font-weight:bold;">裏面
+          (English)</button>
+      </div>
+
+      <div class="form-row"
+        style="background:#f0f8ff; padding:12px; border-radius:6px; margin-bottom:12px; border:1px solid #cce5ff;">
+        <label style="color:#005bac; font-weight:bold; margin-bottom:8px; display:block;">🎨 選択中の要素・レイヤー</label>
+        <div style="font-size:13px; font-weight:bold; color:#333; margin-bottom:10px; min-height:18px;"
+          id="selected_element_label">
+          (プレビュー上で要素をクリック)
+        </div>
+        <div style="font-size:11px; font-weight:bold; color:#005bac; margin-top:8px; margin-bottom:4px;">📑 現在の重なり順
+          (上=前面)</div>
+        <div style="font-size:10px; color:#555; margin-bottom:6px;">※ドラッグ＆ドロップで優先順位を並べ替えられます</div>
+        <div id="layer_visual_stack"
+          style="display:flex; flex-direction:column; gap:4px; max-height: 180px; overflow-y: auto; background: white; border: 1px solid #cce5ff; border-radius: 4px; padding: 6px;">
+          <!-- dynamically rendered items -->
+          <div style="font-size:10px; color:#999; text-align:center;">（プレビュー上で操作すると表示されます）</div>
+        </div>
+      </div>
+
+      <div id="front-form-section">
+        <h2>【表面】日本語</h2>
+        <div class="form-row"
+          style="background:#fffcf0; padding:12px; border-radius:6px; margin-bottom:12px; border:1px solid #ffeeba; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:11px; font-weight:bold; color:#856404;">📝 自由追加要素</div>
+          <div style="display:flex; gap:6px;">
+            <button onclick="addCustomElement('front', 'text')"
+              style="padding:4px 8px; font-size:10px; border-radius:4px; border:none; background:#ffc107; color:#212529; font-weight:bold; cursor:pointer;">
+              ＋ テキスト
+            </button>
+            <label
+              style="padding:4px 8px; font-size:10px; border-radius:4px; border:none; background:#17a2b8; color:#fff; font-weight:bold; cursor:pointer; margin:0;">
+              ＋ 画像
+              <input type="file" accept="image/*" style="display:none;" onchange="addCustomImage(event, 'front')">
+            </label>
+          </div>
+        </div>
+        <div id="front_custom_elements_container"></div>
+
+        <div class="form-row"
+          style="margin-bottom: 12px; margin-top:20px; border-top:1px solid #ddd; padding-top:12px;">
+          <label style="color: #222; font-weight: bold; margin: 0;"><input type="checkbox" id="show_right_logos"
+              checked> 右側ロゴ（Pマーク等）を表示</label>
+        </div>
+
+        <div class="form-row"><label><input type="checkbox" id="show_logo" checked> 会社ロゴ画像</label><input type="file"
+            id="logo_input" accept="image/*" onchange="loadLogo(event, 'MAIN_LOGO')"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_logo_pm" checked> 右側ロゴ1</label><input type="file"
+            id="logo_pm_input" accept="image/*" onchange="loadLogo(event, 'PM_LOGO')"><input id="logo_pm_title"
+            placeholder="ロゴ1のタイトル（マウスオーバー表示、例：プライバシーマーク）" style="margin-top:4px;"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_logo_jqa" checked> 右側ロゴ2</label><input type="file"
+            id="logo_jqa_input" accept="image/*" onchange="loadLogo(event, 'JQA_LOGO')"><input id="logo_jqa_title"
+            placeholder="ロゴ2のタイトル（マウスオーバー表示、例：JQA ISO認証）" style="margin-top:4px;"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_logo_km" checked> 右側ロゴ3</label><input type="file"
+            id="logo_km_input" accept="image/*" onchange="loadLogo(event, 'KM_LOGO')"><input id="logo_km_title"
+            placeholder="ロゴ3のタイトル（マウスオーバー表示）" style="margin-top:4px;"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f1" checked> ① 部門名1</label><input id="f1"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f2" checked> ② 部門名2</label><input id="f2"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f3" checked> ③ 担当業務</label><input id="f3"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f4" checked> ④ 役職</label><input id="f4"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f6" checked> ⑥ 氏名（日本語）</label><input id="f6"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f7" checked> ⑦ 会社名（日本語）</label><input id="f7">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_f8" checked> ⑧ TEL（代表）</label><input id="f8"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f9" checked> ⑨ TEL（直通）</label><input id="f9"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f10" checked> ⑩ E-mail</label><input id="f10">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_f11" checked> ⑪ URL</label><input id="f11"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f12" checked> ⑫ 住所</label><textarea
+            id="f12"></textarea></div>
+        <div class="form-row"><label><input type="checkbox" id="show_f_note" checked> フッター注記</label><input id="f_note">
+        </div>
+      </div>
+
+      <div id="back-form-section" style="display:none;">
+        <h2>【裏面】English</h2>
+
+        <div class="form-row"
+          style="background:#fffcf0; padding:12px; border-radius:6px; margin-bottom:12px; border:1px solid #ffeeba; display:flex; justify-content:space-between; align-items:center;">
+          <div style="font-size:11px; font-weight:bold; color:#856404;">📝 自由追加要素</div>
+          <div style="display:flex; gap:6px;">
+            <button onclick="addCustomElement('back', 'text')"
+              style="padding:4px 8px; font-size:10px; border-radius:4px; border:none; background:#ffc107; color:#212529; font-weight:bold; cursor:pointer;">
+              ＋ テキスト
+            </button>
+            <label
+              style="padding:4px 8px; font-size:10px; border-radius:4px; border:none; background:#17a2b8; color:#fff; font-weight:bold; cursor:pointer; margin:0;">
+              ＋ 画像
+              <input type="file" accept="image/*" style="display:none;" onchange="addCustomImage(event, 'back')">
+            </label>
+          </div>
+        </div>
+        <div id="back_custom_elements_container"></div>
+
+        <div class="form-row" style="margin-top:20px; border-top:1px solid #ddd; padding-top:12px;"><label><input
+              type="checkbox" id="show_b_logo" checked> 会社ロゴ画像 (EN)</label></div>
+        <div class="form-row"><label><input type="checkbox" id="show_b1" checked> ❶ Name (EN)</label><input id="b1">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b3" checked> ❸ Title (EN)</label><input id="b3">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b4" checked> ❹ Section (EN)</label><input id="b4">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b5" checked> ❺ Division (EN)</label><input id="b5">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b6" checked> ❻ Headquarters (EN)</label><input
+            id="b6"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_b7" checked> ❼ Company (EN)</label><input id="b7">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b8" checked> ❽ TEL Main (EN)</label><input id="b8">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b9" checked> ❾ TEL Direct (EN)</label><input
+            id="b9"></div>
+        <div class="form-row"><label><input type="checkbox" id="show_b10" checked> E-mail (EN)</label><input id="b10">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b11" checked> URL (EN)</label><input id="b11">
+        </div>
+        <div class="form-row"><label><input type="checkbox" id="show_b12" checked> 住所 (EN)</label><textarea
+            id="b12"></textarea></div>
+      </div>
+    </div>
+
+    <!-- プレビュー -->
+    <div class="preview-panel">
+      <div class="sheet-wrap" id="front-preview-wrap">
+        <div class="sheet-label">【表面】</div>
+        <div class="sheet-outer">
+          <div class="sheet">
+            <div class="cards-grid" id="front-grid"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-wrap" id="back-preview-wrap" style="display:none;">
+        <div class="sheet-label">【裏面】</div>
+        <div class="sheet-outer">
+          <div class="sheet">
+            <div class="cards-grid" id="back-grid"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let PM_LOGO = '';
+    let JQA_LOGO = '';
+    let KM_LOGO = '';
+    let MAIN_LOGO = '';
+
+    let customElements = []; // { id: string, type: 'text'|'image', content: string(text/base64), side: 'front'|'back', show: boolean }
+
+    function addCustomElement(side, type, initialContent = '') {
+      const newId = 'custom_el_' + Date.now() + Math.floor(Math.random() * 1000);
+      customElements.push({
+        id: newId,
+        type: type,
+        content: initialContent || (type === 'text' ? '新規テキスト' : ''),
+        side: side,
+        show: true
+      });
+      renderCustomElementInputs();
+      render();
+    }
+
+    function addCustomImage(event, side) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        addCustomElement(side, 'image', e.target.result);
+      };
+      reader.readAsDataURL(file);
+      event.target.value = '';
+    }
+
+    function removeCustomElement(id) {
+      customElements = customElements.filter(el => el.id !== id);
+      delete elementOffsets[id];
+      delete elementZIndexes[id];
+      if (selectedElementClass === id) selectedElementClass = null;
+      renderCustomElementInputs();
+      render();
+    }
+
+    function updateCustomElement(id, key, value) {
+      const idx = customElements.findIndex(el => el.id === id);
+      if (idx > -1) {
+        customElements[idx][key] = value;
+        if (key === 'content' && customElements[idx].type === 'image') return; // Should not update image content this way ideally
+        render();
+      }
+    }
+
+    function updateCustomImageData(event, id) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        updateCustomElement(id, 'content', e.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderCustomElementInputs() {
+      const fContainer = document.getElementById('front_custom_elements_container');
+      const bContainer = document.getElementById('back_custom_elements_container');
+      if (!fContainer || !bContainer) return;
+
+      let fHtml = '';
+      let bHtml = '';
+
+      customElements.forEach(el => {
+        let contentHtml = '';
+        if (el.type === 'text') {
+          contentHtml = `<textarea rows="2" oninput="updateCustomElement('${el.id}', 'content', this.value)">${esc(el.content)}</textarea>`;
+        } else if (el.type === 'image') {
+          contentHtml = `
+            <div style="display:flex; align-items:center; gap:8px;">
+              <img src="${el.content}" style="width:40px; height:40px; object-fit:contain; border:1px solid #ccc; background:#fff;">
+              <label style="padding:4px 8px; font-size:10px; border-radius:4px; border:1px solid #ccc; background:#f8f9fa; cursor:pointer; margin:0;">
+                画像を変更
+                <input type="file" accept="image/*" style="display:none;" onchange="updateCustomImageData(event, '${el.id}')">
+              </label>
+            </div>
+          `;
+        }
+
+        const borderColor = el.type === 'text' ? '#ffc107' : '#17a2b8';
+
+        const html = `
+          <div class="form-row" style="border-left:3px solid ${borderColor}; padding-left:8px; margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+              <label style="margin:0;"><input type="checkbox" ${el.show ? 'checked' : ''} onchange="updateCustomElement('${el.id}', 'show', this.checked)"> 表示</label>
+              <button onclick="removeCustomElement('${el.id}')" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:10px;">削除</button>
+            </div>
+            ${contentHtml}
+          </div>
+        `;
+        if (el.side === 'front') fHtml += html;
+        else bHtml += html;
+      });
+
+      fContainer.innerHTML = fHtml;
+      bContainer.innerHTML = bHtml;
+    }
+
+    function loadLogo(event, logoVar) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        if (logoVar === 'PM_LOGO') PM_LOGO = e.target.result;
+        else if (logoVar === 'JQA_LOGO') JQA_LOGO = e.target.result;
+        else if (logoVar === 'KM_LOGO') KM_LOGO = e.target.result;
+        else if (logoVar === 'MAIN_LOGO') MAIN_LOGO = e.target.result;
+        render();
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function valObj(id) {
+      const chk = document.getElementById('show_' + id);
+      const el = document.getElementById(id);
+      return {
+        val: el ? el.value.trim() : '',
+        show: chk ? chk.checked : true
+      };
+    }
+    function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    // 値が空の場合は空文字を返す（非表示）
+    function row(num, obj) {
+      if (!obj.val) return '';
+      return `<div style="${obj.show ? '' : 'visibility:hidden;'}">${esc(obj.val)}</div>`;
+    }
+    function span(badge, obj, bg) {
+      if (!obj.val) return '';
+      return `<span style="${obj.show ? '' : 'visibility:hidden;'}">${esc(obj.val)}</span>`;
+    }
+
+    function frontCard() {
+      const f1 = valObj('f1'), f2 = valObj('f2'), f3 = valObj('f3'), f4 = valObj('f4'), f6 = valObj('f6');
+      const f7 = valObj('f7'), f8 = valObj('f8'), f9 = valObj('f9'), f10 = valObj('f10'), f11 = valObj('f11'), f12 = valObj('f12');
+      const fn = valObj('f_note');
+
+      // 部署行：空なら非表示
+      const deptRows = [row('①', f1), row('②', f2), row('③', f3), row('④', f4)].join('');
+      const deptBlock = deptRows ? `<div class="dept-info">${deptRows}</div>` : '';
+
+      // 氏名
+      const nameBlock = f6.val ? `<div class="name-block" style="${f6.show ? '' : 'visibility:hidden;'}">
+      <div class="name-ja">${esc(f6.val)}</div>
+    </div>` : '';
+
+      // TEL行
+      const tel8 = f8.val ? `<span style="${f8.show ? '' : 'visibility:hidden;'}">TEL ${esc(f8.val)}(代表)</span>` : '';
+      const tel9 = f9.val ? `<span style="${f9.show ? '' : 'visibility:hidden;'}">&nbsp;${esc(f9.val)}(直通)</span>` : '';
+      const telLine = (f8.val || f9.val) ? `<div>${tel8}${tel9}</div>` : '';
+
+      // Email/URL行
+      const mail = f10.val ? `<span style="${f10.show ? '' : 'visibility:hidden;'}">E-mail: ${esc(f10.val)}</span>` : '';
+      const url = f11.val ? `<span style="${f11.show ? '' : 'visibility:hidden;'}">&nbsp;URL: ${esc(f11.val)}</span>` : '';
+      const mailLine = (f10.val || f11.val) ? `<div>${mail}${url}</div>` : '';
+
+      // 住所行
+      const addrLine = f12.val ? `<div style="${f12.show ? '' : 'visibility:hidden;'}">${esc(f12.val).split('\n').join('<br>')}</div>` : '';
+
+      const contactInner = telLine + mailLine + addrLine;
+      const contactBlock = contactInner ? `<div class="contact-info">${contactInner}</div>` : '';
+      const companyBlock = f7.val ? `<div class="company-name-ja" style="${f7.show ? '' : 'visibility:hidden;'}">${esc(f7.val)}</div>` : '';
+      const divider = (companyBlock || contactBlock) ? '<hr class="divider">' : '';
+      const footerBlock = fn.val ? `<div class="footer-note" style="${fn.show ? '' : 'visibility:hidden;'}">${esc(fn.val)}</div>` : '';
+
+      const showRightLogos = document.getElementById('show_right_logos')?.checked !== false;
+      const showPm = document.getElementById('show_logo_pm')?.checked !== false;
+      const showJqa = document.getElementById('show_logo_jqa')?.checked !== false;
+      const showKm = document.getElementById('show_logo_km')?.checked !== false;
+      const pmTitle = document.getElementById('logo_pm_title')?.value.trim() || '';
+      const jqaTitle = document.getElementById('logo_jqa_title')?.value.trim() || '';
+      const kmTitle = document.getElementById('logo_km_title')?.value.trim() || '';
+      let certContent = '';
+      if (showPm) certContent += `<img src="${PM_LOGO}" title="${esc(pmTitle)}"/>`;
+      if (showJqa) certContent += `<img src="${JQA_LOGO}" title="${esc(jqaTitle)}"/>`;
+      if (showKm) certContent += `<img src="${KM_LOGO}" title="${esc(kmTitle)}"/>`;
+
+      const certBlock = (showRightLogos && certContent) ? `<div class="cert-block">${certContent}</div>` : '';
+
+      const showMainLogo = document.getElementById('show_logo')?.checked !== false;
+      const logoBlock = `<div class="logo" style="${showMainLogo ? '' : 'visibility:hidden;'}"><img src="${MAIN_LOGO}"/></div>`;
+
+      let customHtml = '';
+      customElements.filter(el => el.side === 'front').forEach(el => {
+        if (el.type === 'text') {
+          customHtml += `<div class="${el.id} custom-el" style="${el.show ? '' : 'visibility:hidden;'} white-space:pre-wrap; position:absolute; left:0; top:0; font-size: ${2 * 3.78}px; font-weight:bold; color:#111; line-height:1.2; z-index:99; background:transparent;">${esc(el.content)}</div>`;
+        } else if (el.type === 'image') {
+          customHtml += `<div class="${el.id} custom-el" style="${el.show ? '' : 'visibility:hidden;'} position:absolute; left:0; top:0; z-index:99; background:transparent; display:flex; "><img src="${el.content}" style="height:${9 * 3.78}px; width:auto; border-radius:2px; display:block;" /></div>`;
+        }
+      });
+
+      return `<div class="card"><div class="card-front" style="position:relative;">
+    ${logoBlock}
+    ${deptBlock}
+    ${certBlock}
+    ${nameBlock}
+    ${divider}
+    ${companyBlock}
+    ${contactBlock}
+    ${footerBlock}
+    ${customHtml}
+  </div></div>`;
+    }
+
+    function backCard() {
+      const b1 = valObj('b1'), b3 = valObj('b3'), b4 = valObj('b4'), b5 = valObj('b5'), b6 = valObj('b6');
+      const b7 = valObj('b7'), b8 = valObj('b8'), b9 = valObj('b9'), b10 = valObj('b10'), b11 = valObj('b11'), b12 = valObj('b12');
+
+      const nameBlock = b1.val ? `<div class="name-en" style="${b1.show ? '' : 'visibility:hidden;'}">${esc(b1.val)}</div>` : '';
+
+      const deptSpans = [span('', b3), span('', b4), span('', b5), span('', b6)].join('');
+      const deptBlock = deptSpans ? `<div class="dept-en">${deptSpans}</div>` : '';
+
+      const companyBlock = b7.val ? `<div class="company-en" style="${b7.show ? '' : 'visibility:hidden;'}">${esc(b7.val)}</div>` : '';
+
+      const tel8 = b8.val ? `<span style="${b8.show ? '' : 'visibility:hidden;'}">TEL ${esc(b8.val)}</span>` : '';
+      const tel9 = b9.val ? `<span style="${b9.show ? '' : 'visibility:hidden;'}">&nbsp;${esc(b9.val)}</span>` : '';
+      const telLine = (b8.val || b9.val) ? `<div>${tel8}${tel9}</div>` : '';
+      const mailLine = (b10.val || b11.val) ? `<div>${b10.val ? '<span style="' + (b10.show ? '' : 'visibility:hidden;') + '">E-mail: ' + esc(b10.val) + '</span>' : ''}${b11.val ? '<span style="' + (b11.show ? '' : 'visibility:hidden;') + '">&nbsp; URL: ' + esc(b11.val) + '</span>' : ''}</div>` : '';
+      const addrLine = b12.val ? `<div style="${b12.show ? '' : 'visibility:hidden;'}">${esc(b12.val).split('\n').join('<br>')}</div>` : '';
+      const contactInner = telLine + mailLine + addrLine;
+      const contactBlock = contactInner ? `<div class="contact-en">${contactInner}</div>` : '';
+
+      const divider = (companyBlock || contactBlock) ? '<hr class="divider-en">' : '';
+
+      const showBackLogo = document.getElementById('show_b_logo')?.checked !== false;
+      const logoBlock = `<div class="logo-en" style="${showBackLogo ? '' : 'visibility:hidden;'}"><img src="${MAIN_LOGO}"/></div>`;
+
+      let customHtml = '';
+      customElements.filter(el => el.side === 'back').forEach(el => {
+        if (el.type === 'text') {
+          customHtml += `<div class="${el.id} custom-el" style="${el.show ? '' : 'visibility:hidden;'} white-space:pre-wrap; position:absolute; left:0; top:0; font-size: ${2 * 3.78}px; font-weight:bold; color:#111; line-height:1.2; z-index:99; background:transparent;">${esc(el.content)}</div>`;
+        } else if (el.type === 'image') {
+          customHtml += `<div class="${el.id} custom-el" style="${el.show ? '' : 'visibility:hidden;'} position:absolute; left:0; top:0; z-index:99; background:transparent; display:flex; "><img src="${el.content}" style="height:${9 * 3.78}px; width:auto; border-radius:2px; display:block;" /></div>`;
+        }
+      });
+
+      return `<div class="card"><div class="card-back" style="position:relative;">
+    ${logoBlock}
+    ${nameBlock}
+    ${deptBlock}
+    ${divider}
+    ${companyBlock}
+    ${contactBlock}
+    ${customHtml}
+  </div></div>`;
+    }
+
+    // ===== 元に戻す・リセット機能 =====
+    let stateHistory = [];
+    let currentStateIndex = -1;
+    let isRestoringState = false;
+    let pushStateTimer = null;
+
+    function getCurrentStateJSON() {
+      const ids = ['f1', 'f2', 'f3', 'f4', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'f_note',
+        'b1', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10', 'b11', 'b12',
+        'logo_pm_title', 'logo_jqa_title', 'logo_km_title'];
+      const data = {};
+      ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) data[id] = el.value;
+      });
+      document.querySelectorAll('.form-panel input[type="checkbox"]').forEach(chk => {
+        data[chk.id] = chk.checked;
+      });
+      data['_offsets'] = JSON.parse(JSON.stringify(elementOffsets));
+      data['_zindexes'] = JSON.parse(JSON.stringify(elementZIndexes));
+      data['_custom_elements'] = JSON.parse(JSON.stringify(customElements));
+      return JSON.stringify(data);
+    }
+
+    function requestPushState() {
+      if (isRestoringState) return;
+      clearTimeout(pushStateTimer);
+      pushStateTimer = setTimeout(() => { pushStateSync(); }, 500);
+    }
+
+    function pushStateSync() {
+      if (isRestoringState) return;
+      const stateStr = getCurrentStateJSON();
+      if (currentStateIndex >= 0 && stateHistory[currentStateIndex] === stateStr) return;
+
+      if (currentStateIndex < stateHistory.length - 1) {
+        stateHistory = stateHistory.slice(0, currentStateIndex + 1);
+      }
+
+      stateHistory.push(stateStr);
+      if (stateHistory.length > 50) stateHistory.shift();
+      else currentStateIndex++;
+
+      updateHistoryButtons();
+    }
+
+    function updateHistoryButtons() {
+      const btn = document.getElementById('btnUndo');
+      if (btn) {
+        btn.disabled = currentStateIndex <= 0;
+        btn.style.opacity = currentStateIndex <= 0 ? '0.5' : '1';
+        btn.style.cursor = currentStateIndex <= 0 ? 'not-allowed' : 'pointer';
+      }
+    }
+
+    function undoLayout() {
+      if (currentStateIndex > 0) {
+        currentStateIndex--;
+        restoreState(stateHistory[currentStateIndex]);
+        updateHistoryButtons();
+      }
+    }
+
+    function resetLayout() {
+      if (confirm('すべてのレイアウト配置と重なり順を初期状態にリセットしますか？\\n※入力した文字はそのまま残ります。')) {
+        elementOffsets = {};
+        elementZIndexes = {};
+        selectedElementClass = null;
+        customElements = [];
+        const selLabel = document.getElementById('selected_element_label');
+        if (selLabel) selLabel.textContent = '(プレビュー上で要素をクリック)';
+        applyDynamicStyles();
+        renderCustomElementInputs();
+        render();
+        pushStateSync();
+      }
+    }
+
+    function restoreState(stateStr) {
+      isRestoringState = true;
+      const data = JSON.parse(stateStr);
+      Object.entries(data).forEach(([id, val]) => {
+        if (id === '_offsets') {
+          elementOffsets = val;
+        } else if (id === '_zindexes') {
+          elementZIndexes = val;
+        } else if (id === '_custom_elements' || id === '_custom_texts') { // support legacy _custom_texts
+          customElements = val;
+          renderCustomElementInputs();
+        } else if (id === '_show_right_logos') {
+          document.getElementById('show_right_logos').checked = val;
+        } else {
+          const el = document.getElementById(id);
+          if (el) {
+            if (el.type === 'checkbox') el.checked = val;
+            else el.value = val;
+          }
+        }
+      });
+      applyDynamicStyles();
+      render();
+      setTimeout(() => { isRestoringState = false; }, 10);
+    }
+
+    function render() {
+      const fg = document.getElementById('front-grid');
+      const bg = document.getElementById('back-grid');
+      let fh = '', bh = '';
+      for (let i = 0; i < 10; i++) { fh += frontCard(); bh += backCard(); }
+      fg.innerHTML = fh;
+      bg.innerHTML = bh;
+      if (typeof renderLayerStack === 'function') renderLayerStack();
+      requestPushState();
+    }
+
+    // 全inputにリアルタイム更新
+    document.querySelectorAll('.form-panel input, .form-panel textarea').forEach(el => {
+      el.addEventListener('input', render);
+    });
+
+    // ===== ズームプレビュー =====
+    let currentZoomTab = 'front';
+
+    function openZoom() {
+      currentZoomTab = 'front';
+      document.getElementById('tabFront').classList.add('active');
+      document.getElementById('tabBack').classList.remove('active');
+      document.getElementById('zoomOverlay').classList.add('open');
+      renderZoomFrame();
+    }
+    function closeZoom() {
+      document.getElementById('zoomOverlay').classList.remove('open');
+    }
+    function closeZoomOutside(e) {
+      if (e.target === document.getElementById('zoomOverlay')) closeZoom();
+    }
+
+    // ===== ドラッグ移動 =====
+    let elementOffsets = {};
+    let elementZIndexes = {};
+    let selectedElementClass = null;
+    let draggingElementClass = null;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let initialOffsetX = 0;
+    let initialOffsetY = 0;
+
+    const draggableClassesFront = [
+      'logo', 'dept-info', 'cert-block', 'name-block', 'divider',
+      'company-name-ja', 'contact-info', 'footer-note'
+    ];
+    const draggableClassesBack = [
+      'logo-en', 'name-en', 'dept-en', 'divider-en', 'company-en', 'contact-en'
+    ];
+    const draggableClasses = [...draggableClassesFront, ...draggableClassesBack];
+
+    const classNameToLabel = {
+      'logo': '会社ロゴ画像 (表面)',
+      'dept-info': '部署・役職',
+      'cert-block': '右側ロゴ（Pマーク等）',
+      'name-block': '氏名（日本語）',
+      'divider': '区切り線 (表面)',
+      'company-name-ja': '会社名（日本語）',
+      'contact-info': '連絡先・住所 (表面)',
+      'footer-note': 'フッター注記',
+      'logo-en': '会社ロゴ画像 (裏面)',
+      'name-en': 'Name (英語)',
+      'dept-en': '部署・役職 (英語)',
+      'divider-en': '区切り線 (裏面)',
+      'company-en': 'Company (英語)',
+      'contact-en': '連絡先・住所 (裏面)'
+    };
+
+    document.addEventListener('mousedown', (e) => {
+      // プレビュー外かつレイヤースタック外をクリックした場合は選択解除
+      if (!e.target.closest('.preview-panel') && !e.target.closest('#layer_visual_stack')) {
+        if (selectedElementClass) {
+          selectedElementClass = null;
+          const selLabel = document.getElementById('selected_element_label');
+          if (selLabel) selLabel.textContent = '(プレビュー上で要素をクリック)';
+          applyDynamicStyles();
+          updateLayerStackHighlight();
+        }
+        return;
+      }
+
+      let targetClass = null;
+      for (const cls of draggableClasses) {
+        if (e.target.closest('.' + cls)) {
+          targetClass = cls;
+          break;
+        }
+      }
+
+      if (targetClass) {
+        draggingElementClass = targetClass;
+        selectedElementClass = targetClass;
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        const selLabel = document.getElementById('selected_element_label');
+        if (selLabel) selLabel.innerHTML = `✅ ${classNameToLabel[targetClass] || targetClass}`;
+
+        if (!elementOffsets[targetClass]) {
+          elementOffsets[targetClass] = { x: 0, y: 0 };
+        }
+        initialOffsetX = elementOffsets[targetClass].x;
+        initialOffsetY = elementOffsets[targetClass].y;
+
+        applyDynamicStyles();
+        updateLayerStackHighlight();
+        e.preventDefault();
+      }
+    });
+
+    function selectLayerFromStack(cls) {
+      selectedElementClass = cls;
+      const selLabel = document.getElementById('selected_element_label');
+      if (selLabel) selLabel.innerHTML = `✅ ${classNameToLabel[cls] || cls}`;
+
+      if (!elementOffsets[cls]) {
+        elementOffsets[cls] = { x: 0, y: 0 };
+      }
+      applyDynamicStyles();
+      updateLayerStackHighlight();
+    }
+
+    function updateLayerStackHighlight() {
+      for (const c of draggableClasses) {
+        const el = document.getElementById(`layer_item_${c}`);
+        if (el) {
+          const isSelected = c === selectedElementClass;
+          el.style.background = isSelected ? '#e60012' : '#f8f9fa';
+          el.style.color = isSelected ? '#ffffff' : '#333333';
+          el.style.borderColor = isSelected ? '#e60012' : '#ddd';
+        }
+      }
+    }
+
+    let draggedStackLayer = null;
+
+    function handleLayerStackDragStart(e, cls) {
+      draggedStackLayer = cls;
+      selectLayerFromStack(cls);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', cls);
+      e.target.style.opacity = '0.4';
+    }
+
+    function handleLayerStackDragEnd(e) {
+      e.target.style.opacity = '1';
+      draggedStackLayer = null;
+    }
+
+    function handleLayerStackDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      // Basic visual feedback
+      return false;
+    }
+
+    function handleLayerStackDrop(e, targetCls) {
+      e.preventDefault();
+      if (!draggedStackLayer || draggedStackLayer === targetCls) return;
+
+      const items = draggableClasses.map((cls, idx) => {
+        return { cls, z: elementZIndexes[cls] || 0, originalIndex: idx };
+      });
+      items.sort((a, b) => b.z !== a.z ? b.z - a.z : a.originalIndex - b.originalIndex);
+
+      const oldIndex = items.findIndex(i => i.cls === draggedStackLayer);
+      const newIndex = items.findIndex(i => i.cls === targetCls);
+
+      const [movedItem] = items.splice(oldIndex, 1);
+      items.splice(newIndex, 0, movedItem);
+
+      items.forEach((item, i) => {
+        elementZIndexes[item.cls] = (items.length - i) * 10;
+      });
+
+      draggedStackLayer = null;
+      applyDynamicStyles();
+      renderLayerStack();
+      renderZoomFrame();
+    }
+
+    document.addEventListener('mousemove', (e) => {
+      if (draggingElementClass) {
+        const dx = e.clientX - dragStartX;
+        const dy = e.clientY - dragStartY;
+
+        // メインパネルのA4シートは0.5倍に縮小されているので移動量を2倍に補正
+        const scale = 2;
+
+        elementOffsets[draggingElementClass].x = initialOffsetX + dx * scale;
+        elementOffsets[draggingElementClass].y = initialOffsetY + dy * scale;
+
+        applyDynamicStyles();
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      draggingElementClass = null;
+    });
+
+    function applyDynamicStyles() {
+      let styleEl = document.getElementById('dynamic-styles');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'dynamic-styles';
+        document.head.appendChild(styleEl);
+      }
+
+      let css = '';
+      const allDraggables = [...draggableClasses, ...customElements.map(el => el.id)];
+      for (const cls of allDraggables) {
+        if (elementOffsets[cls] || elementZIndexes[cls] !== undefined || cls === selectedElementClass) {
+          const offsetX = elementOffsets[cls] ? elementOffsets[cls].x : 0;
+          const offsetY = elementOffsets[cls] ? elementOffsets[cls].y : 0;
+          const zIndex = elementZIndexes[cls] !== undefined ? elementZIndexes[cls] : 0;
+
+          let extraStyle = '';
+          if (cls === selectedElementClass) {
+            extraStyle = 'outline: 2px dashed #e60012 !important; box-shadow: 0 0 10px rgba(230,0,18,0.2) !important; background: rgba(230,0,18,0.05) !important; cursor: move;';
+          }
+
+          css += `.${cls} { transform: translate(${offsetX}px, ${offsetY}px); z-index: ${zIndex}; position: relative; ${extraStyle} }\n`;
+        }
+      }
+      styleEl.textContent = css;
+      requestPushState();
+    }
+
+    function renderLayerStack() {
+      const container = document.getElementById('layer_visual_stack');
+      if (!container) return;
+
+      // Extract current active nodes based on current tab
+      const baseClasses = currentZoomTab === 'front' ? draggableClassesFront : draggableClassesBack;
+      const customClasses = customElements.filter(el => el.side === currentZoomTab).map(el => el.id);
+      const currentClasses = [...baseClasses, ...customClasses];
+      const items = currentClasses.map((cls, idx) => {
+        let label = classNameToLabel[cls] || cls;
+        const cEl = customElements.find(el => el.id === cls);
+        if (cEl) {
+          if (cEl.type === 'text') {
+            label = '📝 ' + (cEl.content.split('\n')[0].substring(0, 10)) + (cEl.content.length > 10 ? '...' : '');
+          } else if (cEl.type === 'image') {
+            label = '🖼️ 自由追加画像';
+          }
+        }
+        return {
+          cls,
+          label: label,
+          z: elementZIndexes[cls] || 0,
+          originalIndex: idx // fallback sort descriptor
+        };
+      });
+
+      // Sort descending by zIndex, then ascending by originalIndex so DOM flow is preserved somewhat
+      items.sort((a, b) => {
+        if (b.z !== a.z) return b.z - a.z;
+        return a.originalIndex - b.originalIndex;
+      });
+
+      let html = '';
+      items.forEach(item => {
+        const isSelected = item.cls === selectedElementClass;
+        const bg = isSelected ? '#e60012' : '#f8f9fa';
+        const fg = isSelected ? '#ffffff' : '#333333';
+        const border = isSelected ? '#e60012' : '#ddd';
+
+        // Let's create a pop-looking pill shape
+        html += `<div 
+            id="layer_item_${item.cls}"
+            draggable="true"
+            ondragstart="handleLayerStackDragStart(event, '${item.cls}')"
+            ondragend="handleLayerStackDragEnd(event)"
+            ondragover="handleLayerStackDragOver(event)"
+            ondrop="handleLayerStackDrop(event, '${item.cls}')"
+            onclick="selectLayerFromStack('${item.cls}')" 
+            style="cursor:grab; display:flex; justify-content:space-between; align-items:center; background:${bg}; color:${fg}; border:1px solid ${border}; border-radius:12px; padding:4px 10px; font-size:11px; font-weight:bold; transition:all 0.2s; box-shadow:0 1px 2px rgba(0,0,0,0.05); user-select:none;">
+          <span style="display:flex; align-items:center; gap:4px;">
+            <svg width="8" height="12" viewBox="0 0 8 12" fill="currentColor" opacity="0.5"><path d="M2 3a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-4 6a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/></svg>
+            ${item.label}
+          </span>
+          <span style="font-size:9px; opacity:0.8; background:rgba(0,0,0,0.1); padding:2px 6px; border-radius:6px; font-family:monospace;">↕</span>
+        </div>`;
+      });
+      container.innerHTML = html;
+    }
+    function switchTab(side) {
+      currentZoomTab = side;
+
+      // Update sidebar tabs
+      const tbFront = document.getElementById('sideTabFront');
+      const tbBack = document.getElementById('sideTabBack');
+      if (tbFront && tbBack) {
+        tbFront.style.background = side === 'front' ? '#005bac' : '#f0f8ff';
+        tbFront.style.color = side === 'front' ? 'white' : '#005bac';
+        tbFront.style.border = side === 'front' ? 'none' : '1px solid #005bac';
+
+        tbBack.style.background = side === 'back' ? '#005bac' : '#f0f8ff';
+        tbBack.style.color = side === 'back' ? 'white' : '#005bac';
+        tbBack.style.border = side === 'back' ? 'none' : '1px solid #005bac';
+      }
+
+      // Toggle form sections
+      document.getElementById('front-form-section').style.display = side === 'front' ? 'block' : 'none';
+      document.getElementById('back-form-section').style.display = side === 'back' ? 'block' : 'none';
+
+      // Toggle preview wrappers
+      document.getElementById('front-preview-wrap').style.display = side === 'front' ? 'flex' : 'none';
+      document.getElementById('back-preview-wrap').style.display = side === 'back' ? 'flex' : 'none';
+
+      // Toggle zoom modal tabs if it's open
+      const zTabFront = document.getElementById('tabFront');
+      const zTabBack = document.getElementById('tabBack');
+      if (zTabFront) zTabFront.classList.toggle('active', side === 'front');
+      if (zTabBack) zTabBack.classList.toggle('active', side === 'back');
+
+      // Clear selection when flipping
+      selectedElementClass = null;
+      const selLabel = document.getElementById('selected_element_label');
+      if (selLabel) selLabel.textContent = '(プレビュー上で要素をクリック)';
+
+      applyDynamicStyles(); // refresh selection highlight and clear from opposite side
+      renderZoomFrame();
+    }
+
+    function renderZoomFrame() {
+      // 名刺の縦横比: 91mm / 55mm
+      const RATIO = 91 / 55; // ≈ 1.6545
+
+      // tabs(44px) + gap(16px)*2 + padding(20px)*2 = 116px
+      const availW = window.innerWidth - 40;
+      const availH = window.innerHeight - 116;
+
+      let frameW, frameH;
+      if (availW / availH > RATIO) {
+        frameH = Math.floor(availH);
+        frameW = Math.floor(frameH * RATIO);
+      } else {
+        frameW = Math.floor(availW);
+        frameH = Math.floor(frameW / RATIO);
+      }
+
+      const frame = document.getElementById('zoomFrame');
+      frame.setAttribute('width', frameW);
+      frame.setAttribute('height', frameH);
+      frame.style.width = frameW + 'px';
+      frame.style.height = frameH + 'px';
+
+      // iframeの基準: frameWを91mm、frameHを55mmとみなしてスケール
+      // 元のCSSは 1mm単位で書かれているので、px/mm = frameW/91
+      const ppm = (frameW / 91) * 0.82; // pixels per mm (0.82倍で全体を縮小)
+
+      const cardHTML = currentZoomTab === 'front' ? frontCard() : backCard();
+
+      let dynamicCss = '';
+      const pxToScale = (frameW / (91 * 3.77953));
+      for (const cls of draggableClasses) {
+        if (elementOffsets[cls] || elementZIndexes[cls] !== undefined) {
+          const offsetX = elementOffsets[cls] ? elementOffsets[cls].x * pxToScale : 0;
+          const offsetY = elementOffsets[cls] ? elementOffsets[cls].y * pxToScale : 0;
+          const zIndex = elementZIndexes[cls] !== undefined ? elementZIndexes[cls] : 0;
+          dynamicCss += `.${cls} { transform: translate(${offsetX}px, ${offsetY}px); z-index: ${zIndex}; position: relative; }\n`;
+        }
+      }
+
+      const doc = `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Noto+Serif+JP:wght@700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+  width:${frameW}px;
+  height:${frameH}px;
+  overflow:hidden;
+  background:white;
+  font-family:'Noto Sans JP',sans-serif;
+}
+.card{
+  width:${frameW}px;
+  height:${frameH}px;
+  overflow:hidden;
+  position:relative;
+}
+.card-front,.card-back{
+  width:${frameW}px;
+  height:${frameH}px;
+  padding:0px ${5 * ppm}px ${5 * ppm}px;
+  display:flex;
+  flex-direction:column;
+  background:white;
+  position:relative;
+}
+.logo, .logo-en{margin-bottom:${2 * ppm}px;}
+.card-front .logo{margin-top:${1.5 * ppm}px;}
+.card-back .logo-en{margin-top:${1 * ppm}px;}
+.logo img, .logo-en img{height:${9 * ppm}px;width:auto;display:block;}
+.dept-info{
+  font-size:${2.2 * ppm}px;color:#333;line-height:1.4;
+  margin-bottom:${0.5 * ppm}px;
+  padding-left:${15.2 * ppm}px;
+  flex-shrink:0;
+}
+.dept-info div{display:flex;}
+.name-block{
+  flex-shrink:0;
+  padding-left:${15.2 * ppm}px;
+  margin-top:auto;
+}
+.name-ja{
+  font-family:'Noto Serif JP',serif;
+  font-size:${5.8 * ppm}px;font-weight:700;
+  letter-spacing:${3 * ppm}px;color:#111;line-height:1.1;
+}
+.title-ja{font-size:${1.9 * ppm}px;color:#555;margin-top:${1 * ppm}px;}
+.cert-block{
+  position:absolute;
+  right:${4 * ppm}px;top:${12 * ppm}px;
+  display:flex;gap:${1.5 * ppm}px;align-items:center;justify-content:flex-end;
+}
+.cert-block img{ height:${9 * ppm}px;width:auto; }
+.divider, .divider-en{
+  border:none;border-top:0.3px solid #ddd;
+  margin:${1 * ppm}px 0 ${1 * ppm}px;
+  margin-left:${15.2 * ppm}px;
+  flex-shrink:0;
+}
+.company-name-ja{
+  font-weight:700;font-size:${2.4 * ppm}px;color:#111;
+  margin-top:${1.5 * ppm}px;margin-bottom:${1 * ppm}px;padding-left:${15.2 * ppm}px;
+  flex-shrink:0;
+}
+.contact-info{
+  font-size:${1.9 * ppm}px;color:#333;line-height:1.4;
+  padding-left:${15.2 * ppm}px;flex-shrink:0;
+}
+.footer-note{
+  text-align:center;font-size:${1.6 * ppm}px;color:#888;
+  margin-top:auto;padding-top:${1 * ppm}px;flex-shrink:0;
+}
+.name-en{
+  font-size:${4.4 * ppm}px;font-weight:700;letter-spacing:${1 * ppm}px;
+  margin-bottom:${1 * ppm}px;padding-left:${15.2 * ppm}px;flex-shrink:0;
+}
+.dept-en{
+  font-size:${2.2 * ppm}px;color:#333;line-height:1.4;
+  margin-bottom:${0.5 * ppm}px;padding-left:${15.2 * ppm}px;flex-shrink:0;
+}
+.dept-en span{display:flex;gap:${3 * ppm}px;align-items:flex-start;}
+.company-en{
+  font-weight:700;font-size:${2.6 * ppm}px;
+  margin-top:${1.5 * ppm}px;margin-bottom:${1 * ppm}px;letter-spacing:0.5px;
+  padding-left:${15.2 * ppm}px;flex-shrink:0;
+}
+.contact-en{
+  font-size:${2.0 * ppm}px;color:#333;line-height:1.4;
+  padding-left:${15.2 * ppm}px;flex-shrink:0;
+}
+.cert-logos{
+  display:flex;gap:${2.5 * ppm}px;align-items:center;
+  padding-left:${15.2 * ppm}px;margin-top:auto;
+  padding-bottom:${1 * ppm}px;flex-shrink:0;
+}
+.cert-logos img{ height:${9 * ppm}px;width:auto; }
+${dynamicCss}
+</style>
+</head>
+<body>${cardHTML}</body>
+</html>`;
+
+      frame.srcdoc = doc;
+    }
+
+    // ===== エクスポート =====
+    function exportData() {
+      const ids = ['f1', 'f2', 'f3', 'f4', 'f6', 'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'f_note',
+        'b1', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9', 'b10', 'b11', 'b12',
+        'logo_pm_title', 'logo_jqa_title', 'logo_km_title'];
+      const data = {};
+      ids.forEach(id => { data[id] = document.getElementById(id).value; });
+      document.querySelectorAll('.form-panel input[type="checkbox"]').forEach(chk => {
+        data[chk.id] = chk.checked;
+      });
+      data['_offsets'] = elementOffsets;
+      data['_zindexes'] = elementZIndexes;
+
+      // 画像データもエクスポートに含める
+      data['_images'] = {
+        MAIN_LOGO,
+        PM_LOGO,
+        JQA_LOGO,
+        KM_LOGO
+      };
+
+      data['_custom_elements'] = customElements;
+
+      const exportVersion = "1.1";
+      data['_version'] = exportVersion;
+
+      // 日付を含めたわかりやすいファイル名
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const filename = `meishi_data_${dateStr}.json`;
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+    }
+
+    // ===== インポート =====
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = JSON.parse(e.target.result);
+          Object.entries(data).forEach(([id, val]) => {
+            if (id === '_offsets') {
+              elementOffsets = val;
+              applyDynamicStyles();
+            } else if (id === '_zindexes') {
+              elementZIndexes = val;
+              applyDynamicStyles();
+            } else if (id === '_images') {
+              if (val.MAIN_LOGO) MAIN_LOGO = val.MAIN_LOGO;
+              if (val.PM_LOGO) PM_LOGO = val.PM_LOGO;
+              if (val.JQA_LOGO) JQA_LOGO = val.JQA_LOGO;
+              if (val.KM_LOGO) KM_LOGO = val.KM_LOGO;
+            } else if (id === '_custom_elements' || id === '_custom_texts') { // backward compat
+              customElements = val;
+              renderCustomElementInputs();
+            } else if (id !== '_version') {
+              const el = document.getElementById(id);
+              if (el) {
+                if (el.type === 'checkbox') el.checked = val;
+                else el.value = val;
+              }
+            }
+          });
+          render();
+        } catch (err) {
+          alert('インポートに失敗しました。対応していない形式か、JSONファイルが破損しています。');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = ''; // 同じファイルを再度選択できるようリセット
+    }
+
+    // 全てのcheckboxの変更でも再描画する
+    document.querySelectorAll('.form-panel input[type="checkbox"]').forEach(chk => {
+      chk.addEventListener('change', render);
+    });
+
+    renderCustomElementInputs();
+    // Initial render and set initial history state
+    render();
+    setTimeout(() => pushStateSync(), 100);
+
+    const defaultMeishiData = {
+      "f1": "なんちゃら本部",
+      "f2": "ぺけぺけ部門",
+      "f3": "ほげほげチーム",
+      "f4": "部長",
+      "f6": "鈴　木　一　郎",
+      "f7": "未来商事株式会社",
+      "f8": "(03)0000-0000",
+      "f9": "(03)0000-0000",
+      "f10": "ichiro.suzuki@mirai-shoji.co.jp",
+      "f11": "https://www.mirai-shoji.co.jp/",
+      "f_note": "未来グループは、未来をつなぐ企業です",
+      "b1": "ICHIRO SUZUKI",
+      "b3": "Senior Manager",
+      "b4": "Hoge-Hoge Team",
+      "b5": "Peke Peke Division",
+      "b6": "Nanchara Headquarters",
+      "b7": "Mirai Sales CORPORATION",
+      "b8": "+81 3 0000 0000 (Main)",
+      "b9": "+81 3 0000 0000 (Direct)",
+      "b10": "ichiro.suzuki@mirai-shoji.co.jp",
+      "b11": "https://www.mirai-shoji.com/",
+      "f12": "〒000-0000 東京都未来区未来町未来タワー",
+      "b12": "Mirai Tower\n Mirai-cho, Mirai-ku, Tokyo 000-0000, Japan"
+    };
+
+    window.addEventListener('DOMContentLoaded', () => {
+      for (const [id, value] of Object.entries(defaultMeishiData)) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = value;
+        }
+      }
+      // 初期描画をトリガー
+      if (typeof render === 'function') {
+        render();
+      }
+    });
+  </script>
+</body>
+
+</html>
