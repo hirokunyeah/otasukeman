@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>デジポ・メーカー</title>
+  
+  <!-- スタイルとReactのシステムを読み込み -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    /* ブラウザのデフォルトの余白を消す */
+    body { margin: 0; padding: 0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- アプリケーションのプログラム本体 -->
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    // --- アイコン(SVG)の定義 ---
+    const ImageIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>;
+    const Type = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>;
+    const LinkIcon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>;
+    const QrCode = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>;
+    const Eye = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>;
+    const Edit2 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>;
+    const Trash2 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>;
+    const Plus = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
+    const Download = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>;
+    const MessageCircle = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></svg>;
+    const X = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
+    const Share2 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>;
+    const AlignLeft = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="15" x2="3" y1="12" y2="12"/><line x1="17" x2="3" y1="18" y2="18"/></svg>;
+    const AlignCenter = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="17" x2="7" y1="12" y2="12"/><line x1="19" x2="5" y1="18" y2="18"/></svg>;
+    const AlignRight = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="21" x2="9" y1="12" y2="12"/><line x1="21" x2="7" y1="18" y2="18"/></svg>;
+    const Underline = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4v6a6 6 0 0 0 12 0V4"/><line x1="4" x2="20" y1="20" y2="20"/></svg>;
+    const Camera = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>;
+    const ChevronLeft = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>;
+    const ChevronRight = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
+    const Layers = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
+    const FileText = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>;
+    const MessageSquare = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
+
+    const hexToRgba = (hex, opacity) => {
+      const h = hex || '#000000';
+      const o = opacity !== undefined ? opacity : 0;
+      if (o === 0) return 'transparent';
+      const r = parseInt(h.slice(1, 3), 16) || 0;
+      const g = parseInt(h.slice(3, 5), 16) || 0;
+      const b = parseInt(h.slice(5, 7), 16) || 0;
+      return `rgba(${r}, ${g}, ${b}, ${o / 100})`;
+    };
+
+    function App() {
+      const bgPresets = [
+        'https://images.unsplash.com/photo-1558636508-e0db3814bd1d?w=800&q=80',
+        'https://images.unsplash.com/photo-1530103862676-de3c9de59f9e?w=800&q=80',
+        'https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?w=800&q=80',
+        'https://images.unsplash.com/photo-1464347744102-11db6282f854?w=800&q=80'
+      ];
+
+      const [pages, setPages] = useState([
+        {
+          id: 1,
+          bgType: 'image',
+          background: bgPresets[0],
+          bgColor: '#fdf2f8',
+          elements: [
+            { id: 1, type: 'text', content: 'Happy Birthday!', x: 40, y: 60, color: '#ffffff', fontSize: 48, fontWeight: 'bold', textDecoration: 'none', textAlign: 'left', bgColor: '#000000', bgOpacity: 0 },
+            { id: 2, type: 'text', content: 'あんなさん、\nお誕生日おめでとうございます！', x: 40, y: 140, color: '#ffffff', fontSize: 20, fontWeight: 'bold', textDecoration: 'none', textAlign: 'left', bgColor: '#000000', bgOpacity: 0 },
+            { id: 3, type: 'qr', content: 'あんなさんへ\nいつも本当にありがとう！\nこれからの1年も素晴らしい年になりますように✨\n\nここだけの秘密のメッセージでした🎁', x: 240, y: 440, size: 120 },
+            { id: 4, type: 'text', content: '◀ 画像を保存して\n長押しで読み取ってね！', x: 50, y: 460, color: '#fcd34d', fontSize: 16, fontWeight: 'bold', textDecoration: 'none', textAlign: 'left', bgColor: '#000000', bgOpacity: 0 }
+          ]
+        }
+      ]);
+      
+      const [currentPageIndex, setCurrentPageIndex] = useState(0);
+      const [isPreviewMode, setIsPreviewMode] = useState(false);
+      const [selectedElementId, setSelectedElementId] = useState(null);
+      
+      const [draggingId, setDraggingId] = useState(null);
+      const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+      const [inputUrl, setInputUrl] = useState('https://example.com/gift');
+      const [inputLinkText, setInputLinkText] = useState('プレゼントを見る');
+      const [inputPopupLabel, setInputPopupLabel] = useState('🎁 ここをクリック！');
+      const [inputPopupMessage, setInputPopupMessage] = useState('サプライズメッセージ！');
+      const [inputTextQR, setInputTextQR] = useState('ここだけの秘密のメッセージです🎁\nいつもありがとう！');
+      
+      const [activePopupMessage, setActivePopupMessage] = useState(null);
+      const [toastMessage, setToastMessage] = useState('');
+
+      const canvasRef = useRef(null);
+      const fileInputRef = useRef(null);
+      const bgInputRef = useRef(null);
+      const imageElementInputRef = useRef(null);
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
+            
+            if (selectedElementId && !isPreviewMode) {
+              setPages(prevPages => {
+                const newPages = [...prevPages];
+                const currentPage = newPages[currentPageIndex];
+                if (currentPage) {
+                  newPages[currentPageIndex] = {
+                    ...currentPage,
+                    elements: currentPage.elements.filter(el => el.id !== selectedElementId)
+                  };
+                }
+                return newPages;
+              });
+              setSelectedElementId(null);
+            }
+          }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+      }, [selectedElementId, isPreviewMode, currentPageIndex]);
+
+      const elements = pages[currentPageIndex]?.elements || [];
+      const bgType = pages[currentPageIndex]?.bgType || 'image';
+      const background = pages[currentPageIndex]?.background || bgPresets[0];
+      const bgColor = pages[currentPageIndex]?.bgColor || '#fdf2f8';
+
+      const setElements = (newElements) => {
+        setPages(prevPages => {
+          const newPages = [...prevPages];
+          const currentElements = newPages[currentPageIndex]?.elements || [];
+          const updatedElements = typeof newElements === 'function' ? newElements(currentElements) : newElements;
+          newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements: updatedElements };
+          return newPages;
+        });
+      };
+
+      const setPageBackground = (type, value) => {
+        setPages(prevPages => {
+          const newPages = [...prevPages];
+          if (type === 'image') {
+            newPages[currentPageIndex] = { ...newPages[currentPageIndex], bgType: 'image', background: value };
+          } else if (type === 'color') {
+            newPages[currentPageIndex] = { ...newPages[currentPageIndex], bgType: 'color', bgColor: value };
+          }
+          return newPages;
+        });
+      };
+
+      const setBgType = (type) => {
+        setPages(prevPages => {
+          const newPages = [...prevPages];
+          newPages[currentPageIndex] = { ...newPages[currentPageIndex], bgType: type };
+          return newPages;
+        });
+      };
+
+      const handleBgUpload = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setPageBackground('image', e.target.result);
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+      };
+
+      const handleImageElementUpload = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new window.Image();
+          img.onload = () => {
+            const aspectRatio = img.height / img.width;
+            const initialWidth = 150;
+            const initialHeight = Math.round(initialWidth * aspectRatio);
+            const newId = Date.now();
+            
+            setElements(prev => [
+              ...prev,
+              {
+                id: newId,
+                type: 'image',
+                content: e.target.result,
+                x: 100,
+                y: 100,
+                width: initialWidth,
+                height: initialHeight,
+                shape: 'rect',
+                posX: 50,
+                posY: 50,
+                scale: 1,
+                originalWidth: img.width,
+                originalHeight: img.height
+              }
+            ]);
+            setSelectedElementId(newId);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+      };
+
+      const addPage = () => {
+        setPages(prev => [
+          ...prev,
+          { id: Date.now(), bgType: 'image', background: bgPresets[2], bgColor: '#fdf2f8', elements: [] }
+        ]);
+        setCurrentPageIndex(pages.length);
+        setSelectedElementId(null);
+      };
+
+      const deletePage = (index) => {
+        if (pages.length <= 1) return;
+        setPages(prev => prev.filter((_, i) => i !== index));
+        if (currentPageIndex === index) {
+          setCurrentPageIndex(Math.max(0, index - 1));
+        } else if (currentPageIndex > index) {
+          setCurrentPageIndex(currentPageIndex - 1);
+        }
+        setSelectedElementId(null);
+      };
+
+      useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const cardDataStr = params.get('card');
+        if (cardDataStr) {
+          try {
+            const decoded = JSON.parse(decodeURIComponent(atob(cardDataStr)));
+            if (decoded.pages) {
+              setPages(decoded.pages);
+            } else if (decoded.elements) {
+              setPages([{ id: 1, background: decoded.background, elements: decoded.elements }]);
+            }
+            setIsPreviewMode(true);
+          } catch (e) {
+            showToast('データの読み込みに失敗しました');
+          }
+        }
+      }, []);
+
+      const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 3000);
+      };
+
+      const handlePointerDown = (e, id) => {
+        if (isPreviewMode) return;
+        e.stopPropagation();
+        
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+        const el = elements.find(el => el.id === id);
+        const rect = canvasRef.current.getBoundingClientRect();
+        
+        setDraggingId(id);
+        setSelectedElementId(id);
+        setOffset({
+          x: clientX - rect.left - el.x,
+          y: clientY - rect.top - el.y
+        });
+      };
+
+      const handlePointerMove = (e) => {
+        if (draggingId && canvasRef.current) {
+          const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+          const rect = canvasRef.current.getBoundingClientRect();
+          
+          let newX = clientX - rect.left - offset.x;
+          let newY = clientY - rect.top - offset.y;
+          
+          setElements(elements.map(el =>
+            el.id === draggingId ? { ...el, x: newX, y: newY } : el
+          ));
+        }
+      };
+
+      const handlePointerUp = () => {
+        setDraggingId(null);
+      };
+
+      const addText = () => {
+        setElements([...elements, { id: Date.now(), type: 'text', content: 'メッセージ', x: 50, y: 50, color: '#ffffff', fontSize: 24, fontWeight: 'bold', textDecoration: 'none', textAlign: 'left', bgColor: '#000000', bgOpacity: 0 }]);
+      };
+
+      const addBubble = () => {
+        setElements([...elements, { 
+          id: Date.now(), type: 'bubble', content: 'コメント', 
+          x: 100, y: 150, width: 160, height: 100, 
+          color: '#000000', bgColor: '#ffffff', borderColor: '#000000', 
+          fontSize: 18, tailPosition: 'bottom' 
+        }]);
+      };
+
+      const addQR = () => {
+        if (!inputUrl) return;
+        setElements([...elements, { id: Date.now(), type: 'qr', content: inputUrl, x: 100, y: 100, size: 100 }]);
+      };
+      
+      const addTextQR = () => {
+        if (!inputTextQR) return;
+        setElements([...elements, { id: Date.now(), type: 'qr', content: inputTextQR, x: 100, y: 300, size: 100 }]);
+      };
+
+      const addLink = () => {
+        if (!inputUrl || !inputLinkText) return;
+        setElements([...elements, { id: Date.now(), type: 'link', content: inputUrl, text: inputLinkText, x: 100, y: 250, color: '#fcd34d', fontSize: 24 }]);
+      };
+
+      const addPopup = () => {
+        if (!inputPopupLabel || !inputPopupMessage) return;
+        setElements([...elements, { 
+          id: Date.now(), type: 'popup', label: inputPopupLabel, content: inputPopupMessage, x: 100, y: 350, color: '#ffffff', bgColor: '#ec4899', fontSize: 20 
+        }]);
+      };
+
+      const deleteElement = () => {
+        if (selectedElementId) {
+          setElements(elements.filter(el => el.id !== selectedElementId));
+          setSelectedElementId(null);
+        }
+      };
+
+      const exportProjectData = () => {
+        const projectData = { pages };
+        const dataStr = JSON.stringify(projectData, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'card_project.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('✓ プロジェクトデータを保存しました');
+      };
+
+      const importProjectData = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = JSON.parse(e.target.result);
+            if (data.pages) {
+              setPages(data.pages);
+              setCurrentPageIndex(0);
+              setSelectedElementId(null);
+              showToast('✓ プロジェクトデータを読み込みました');
+            } else {
+              showToast('無効なデータ形式です');
+            }
+          } catch (err) {
+            showToast('データの読み込みに失敗しました');
+          }
+        };
+        reader.readAsText(file);
+        event.target.value = ''; 
+      };
+
+      const applyRenderPatch = () => {
+        const style = document.createElement('style');
+        style.id = 'html2canvas-patch';
+        style.innerHTML = `
+          img { display: inline-block !important; height: unset !important; }
+          #canvas-capture-area * { text-rendering: geometricPrecision; }
+        `;
+        document.head.appendChild(style);
+        return () => {
+          const el = document.getElementById('html2canvas-patch');
+          if (el) el.remove();
+        };
+      };
+
+      const exportImage = async () => {
+        showToast('画像を生成中...');
+        try {
+          if (!window.html2canvas) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script');
+              script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+              script.onload = resolve;
+              script.onerror = reject;
+              document.head.appendChild(script);
+            });
+          }
+          
+          const prevSelected = selectedElementId;
+          setSelectedElementId(null);
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          const removePatch = applyRenderPatch();
+
+          const canvas = await window.html2canvas(canvasRef.current, { useCORS: true, scale: 2, backgroundColor: null });
+          
+          removePatch();
+
+          const dataUrl = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = dataUrl;
+          a.download = `card_page${currentPageIndex + 1}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          
+          showToast(`✓ ${currentPageIndex + 1}ページ目を画像として保存しました`);
+          setSelectedElementId(prevSelected);
+        } catch (err) {
+          showToast('画像の生成に失敗しました。');
+        }
+      };
+
+      const exportPDF = async () => {
+        showToast('PDFを生成中...');
+        try {
+          if (!window.html2canvas) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = resolve; script.onerror = reject; document.head.appendChild(script);
+            });
+          }
+          if (!window.jspdf) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'; script.onload = resolve; script.onerror = reject; document.head.appendChild(script);
+            });
+          }
+
+          const { jsPDF } = window.jspdf;
+          const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: [400, 600] });
+          const originalPage = currentPageIndex;
+          const originalPreviewMode = isPreviewMode;
+          const prevSelected = selectedElementId;
+
+          setSelectedElementId(null);
+          setIsPreviewMode(true);
+
+          const removePatch = applyRenderPatch();
+
+          for (let i = 0; i < pages.length; i++) {
+            setCurrentPageIndex(i);
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const originalBgColor = canvasRef.current.style.backgroundColor;
+            if (pages[i].bgType === 'none') {
+              canvasRef.current.style.backgroundColor = '#ffffff';
+            }
+
+            const canvas = await window.html2canvas(canvasRef.current, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
+            const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+            if (pages[i].bgType === 'none') {
+              canvasRef.current.style.backgroundColor = originalBgColor;
+            }
+
+            if (i > 0) pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, 0, 400, 600);
+          }
+
+          removePatch();
+
+          pdf.save('birthday_card.pdf');
+          setCurrentPageIndex(originalPage);
+          setIsPreviewMode(originalPreviewMode);
+          setSelectedElementId(prevSelected);
+          showToast('✓ 全ページをPDFとして保存しました！');
+        } catch (err) {
+          console.error(err);
+          showToast('PDFの生成に失敗しました。');
+        }
+      };
+
+      const printCard = async () => {
+        showToast('印刷の準備中...');
+        try {
+          if (!window.html2canvas) {
+            await new Promise((resolve, reject) => {
+              const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'; script.onload = resolve; script.onerror = reject; document.head.appendChild(script);
+            });
+          }
+
+          const originalPage = currentPageIndex;
+          const originalPreviewMode = isPreviewMode;
+          const prevSelected = selectedElementId;
+
+          setSelectedElementId(null);
+          setIsPreviewMode(true);
+
+          const removePatch = applyRenderPatch();
+
+          const images = [];
+          for (let i = 0; i < pages.length; i++) {
+            setCurrentPageIndex(i);
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const originalBgColor = canvasRef.current.style.backgroundColor;
+            if (pages[i].bgType === 'none') {
+              canvasRef.current.style.backgroundColor = '#ffffff';
+            }
+
+            const canvas = await window.html2canvas(canvasRef.current, { useCORS: true, scale: 2, backgroundColor: '#ffffff' });
+            images.push(canvas.toDataURL('image/jpeg', 0.95));
+
+            if (pages[i].bgType === 'none') {
+              canvasRef.current.style.backgroundColor = originalBgColor;
+            }
+          }
+
+          removePatch();
+
+          setCurrentPageIndex(originalPage);
+          setIsPreviewMode(originalPreviewMode);
+          setSelectedElementId(prevSelected);
+
+          const iframe = document.createElement('iframe');
+          iframe.style.position = 'fixed';
+          iframe.style.right = '0';
+          iframe.style.bottom = '0';
+          iframe.style.width = '0';
+          iframe.style.height = '0';
+          iframe.style.border = '0';
+          document.body.appendChild(iframe);
+
+          const doc = iframe.contentWindow.document;
+          doc.open();
+          
+          doc.write(
+            "<!DOCTYPE html><html><head><title>Birthday Card Print</title><style>" +
+            "@media print { @page { margin: 0; } body { margin: 1cm; display: flex; flex-direction: column; align-items: center; } img { max-width: 100%; height: auto; page-break-after: always; display: block; margin-bottom: 20px; box-shadow: none; } }" +
+            "</style></head><body>" +
+            images.map(src => "<img src='" + src + "' style='max-width: 400px; margin-bottom: 20px;' />").join('') +
+            "<script>window.onload = () => { setTimeout(() => { window.print(); }, 500); };<\/script>" +
+            "</body></html>"
+          );
+          doc.close();
+
+          setTimeout(() => {
+            if(document.body.contains(iframe)) document.body.removeChild(iframe);
+          }, 10000); 
+
+          showToast('✓ 印刷ダイアログを開きます');
+        } catch (err) {
+          console.error(err);
+          showToast('印刷の準備に失敗しました。');
+        }
+      };
+
+      const generateShareLink = () => {
+        const cardData = { pages: pages };
+        try {
+          const encoded = btoa(encodeURIComponent(JSON.stringify(cardData)));
+          const shareUrl = `${window.location.origin}${window.location.pathname}?card=${encoded}`;
+          const textArea = document.createElement("textarea");
+          textArea.value = shareUrl;
+          document.body.appendChild(textArea);
+          textArea.select();
+          document.execCommand('copy');
+          document.body.removeChild(textArea);
+          showToast('✓ 共有リンクをコピーしました！LINEなどに貼り付けて送れます。');
+        } catch(e) {
+          showToast('データが大きすぎます。文字や要素を少し減らしてください。');
+        }
+      };
+
+      const exportHTML = () => {
+        const htmlLines = [
+          "<!DOCTYPE html>",
+          "<html lang='ja'>",
+          "<head>",
+          "  <meta charset='UTF-8'>",
+          "  <meta name='viewport' content='width=device-width, initial-scale=1.0'>",
+          "  <title>Birthday Card</title>",
+          "  <style>",
+          "    body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f3f4f6; font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; overflow: hidden; touch-action: manipulation; }",
+          "    .card-container { position: relative; width: 400px; height: 600px; border-radius: 12px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden; cursor: pointer; background: transparent; }",
+          "    .page { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; transition: opacity 0.4s ease-in-out; }",
+          "    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.2); pointer-events: none; }",
+          "    .nav-arrow { position: absolute; top: 50%; transform: translateY(-50%); font-size: 48px; color: rgba(255,255,255,0.7); pointer-events: none; text-shadow: 0 2px 6px rgba(0,0,0,0.5); z-index: 10; display: none; }",
+          "    .nav-arrow.left { left: 16px; }",
+          "    .nav-arrow.right { right: 16px; }",
+          "    .nav-dots { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 10; pointer-events: none; }",
+          "    .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.4); }",
+          "    .dot.active { background: white; box-shadow: 0 0 4px rgba(0,0,0,0.3); }",
+          "    .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 50; justify-content: center; align-items: center; opacity: 0; transition: opacity 0.3s ease; }",
+          "    .modal-backdrop.active { display: flex; opacity: 1; }",
+          "    .modal-content { background: white; padding: 32px 24px; border-radius: 16px; text-align: center; max-width: 320px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); position: relative; transform: scale(0.9); transition: transform 0.3s ease; }",
+          "    .modal-backdrop.active .modal-content { transform: scale(1); }",
+          "    .close-btn { position: absolute; top: 12px; right: 16px; font-size: 24px; color: #9ca3af; background: none; border: none; cursor: pointer; padding: 0; line-height: 1; }",
+          "    .icon { font-size: 48px; margin-bottom: 16px; display: inline-block; }",
+          "    .print-btn { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background-color: #ec4899; color: white; border: none; box-shadow: 0 4px 12px rgba(236, 72, 153, 0.4); font-size: 24px; cursor: pointer; display: flex; justify-content: center; align-items: center; z-index: 40; transition: transform 0.2s, background-color 0.2s; }",
+          "    .print-btn:hover { background-color: #db2777; transform: scale(1.05); }",
+          "    .print-btn svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }",
+          "    @media print {",
+          "      body { display: block; background: white; height: auto; overflow: visible; }",
+          "      .print-btn, .nav-arrow, .nav-dots { display: none !important; }",
+          "      .card-container { box-shadow: none; width: 100%; height: auto; background: none; overflow: visible; }",
+          "      .page { position: relative !important; opacity: 1 !important; page-break-after: always; margin: 0 auto 20px auto; width: 400px; height: 600px; background-color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }",
+          "    }",
+          "  </style>",
+          "</head>",
+          "<body>",
+          "  <div class='card-container' onclick='handleCardClick(event)'>"
+        ];
+
+        const htmlPages = pages.map((page, index) => {
+          let pageHtml = "    <div id='page-" + index + "' class='page' style='opacity: " + (index === 0 ? "1" : "0") + "; pointer-events: " + (index === 0 ? "auto" : "none") + "; background-color: " + (page.bgType === "color" ? page.bgColor : (page.bgType === "none" ? "transparent" : "#ffffff")) + "; background-image: " + (page.bgType === "image" || !page.bgType ? "url(\"" + page.background + "\")" : "none") + ";'>\n";
+          
+          if (page.bgType === 'image' || !page.bgType) {
+            pageHtml += "      <div class='overlay'></div>\n";
+          }
+          
+          const elementsHtml = page.elements.map(el => {
+            const baseStyle = "position: absolute; left: " + el.x + "px; top: " + el.y + "px;";
+            if (el.type === 'text') {
+              const bgRgba = hexToRgba(el.bgColor, el.bgOpacity);
+              const lh = Math.round(el.fontSize * 1.4);
+              return "      <div style='" + baseStyle + " color: " + el.color + "; background-color: " + bgRgba + "; border-radius: 8px; padding: 4px; font-size: " + el.fontSize + "px; font-weight: " + el.fontWeight + "; text-decoration: " + (el.textDecoration || 'none') + "; text-align: " + (el.textAlign || 'left') + "; white-space: pre-wrap; line-height: " + lh + "px; text-shadow: 1px 2px 4px rgba(0,0,0,0.6); pointer-events: none;'>" + el.content + "</div>";
+            }
+            if (el.type === 'image') {
+              const h = el.shape === 'circle' ? el.width : (el.height || el.width);
+              const br = el.shape === 'circle' ? '50%' : (el.shape === 'rounded' ? '16px' : '0');
+              const px = el.posX !== undefined ? el.posX : 50;
+              const py = el.posY !== undefined ? el.posY : 50;
+              const sc = el.scale || 1;
+              
+              let imgStyleStr = "";
+              if (el.originalWidth && el.originalHeight) {
+                const imgAspect = el.originalWidth / el.originalHeight;
+                const containerAspect = el.width / h;
+                let drawW, drawH;
+                if (imgAspect > containerAspect) {
+                  drawH = h;
+                  drawW = h * imgAspect;
+                } else {
+                  drawW = el.width;
+                  drawH = el.width / imgAspect;
+                }
+                drawW *= sc;
+                drawH *= sc;
+                const left = - (drawW - el.width) * (px / 100);
+                const top = - (drawH - h) * (py / 100);
+                imgStyleStr = "position: absolute; left: " + left + "px; top: " + top + "px; width: " + drawW + "px; height: " + drawH + "px; max-width: none; max-height: none; object-fit: fill; pointer-events: none;";
+              } else {
+                imgStyleStr = "width: 100%; height: 100%; object-fit: cover; object-position: " + px + "% " + py + "%; transform: scale(" + sc + "); transform-origin: " + px + "% " + py + "%; pointer-events: none; display: block;";
+              }
+
+              return "      <div style='" + baseStyle + " width: " + el.width + "px; height: " + h + "px; padding: 0; pointer-events: none;'><div style='width: 100%; height: 100%; border-radius: " + br + "; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); position: relative;'><img src='" + el.content + "' alt='Image' style='" + imgStyleStr + "' /></div></div>";
+            }
+            if (el.type === 'bubble') {
+              let tailHtml = "";
+              if (el.tailPosition === 'bottom') tailHtml = "<svg width='24' height='16' style='position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%);'><path d='M 2,0 L 12,14 L 22,0' fill='" + el.bgColor + "' stroke='" + el.borderColor + "' stroke-width='3' stroke-linejoin='round' /><line x1='2' y1='0' x2='22' y2='0' stroke='" + el.bgColor + "' stroke-width='4' /></svg>";
+              else if (el.tailPosition === 'top') tailHtml = "<svg width='24' height='16' style='position: absolute; top: -15px; left: 50%; transform: translateX(-50%);'><path d='M 2,16 L 12,2 L 22,16' fill='" + el.bgColor + "' stroke='" + el.borderColor + "' stroke-width='3' stroke-linejoin='round' /><line x1='2' y1='16' x2='22' y2='16' stroke='" + el.bgColor + "' stroke-width='4' /></svg>";
+              else if (el.tailPosition === 'left') tailHtml = "<svg width='16' height='24' style='position: absolute; left: -15px; top: 50%; transform: translateY(-50%);'><path d='M 16,2 L 2,12 L 16,22' fill='" + el.bgColor + "' stroke='" + el.borderColor + "' stroke-width='3' stroke-linejoin='round' /><line x1='16' y1='2' x2='16' y2='22' stroke='" + el.bgColor + "' stroke-width='4' /></svg>";
+              else if (el.tailPosition === 'right') tailHtml = "<svg width='16' height='24' style='position: absolute; right: -15px; top: 50%; transform: translateY(-50%);'><path d='M 0,2 L 14,12 L 0,22' fill='" + el.bgColor + "' stroke='" + el.borderColor + "' stroke-width='3' stroke-linejoin='round' /><line x1='0' y1='2' x2='0' y2='22' stroke='" + el.bgColor + "' stroke-width='4' /></svg>";
+              
+              const lh = Math.round(el.fontSize * 1.2);
+              return "      <div style='" + baseStyle + " width: " + el.width + "px; height: " + el.height + "px; pointer-events: none;'><div style='position: relative; width: 100%; height: 100%; background-color: " + el.bgColor + "; border: 3px solid " + el.borderColor + "; border-radius: 24px; padding: 12px; box-sizing: border-box; color: " + el.color + "; font-size: " + el.fontSize + "px; font-weight: bold; text-align: center; white-space: pre-wrap; line-height: " + lh + "px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>" + tailHtml + "<div style='position: absolute; top: 50%; left: 12px; right: 12px; transform: translateY(-50%);'>" + el.content + "</div></div></div>";
+            }
+            if (el.type === 'link') return "      <a href='" + el.content + "' target='_blank' rel='noopener noreferrer' style='" + baseStyle + " color: " + el.color + "; font-size: " + el.fontSize + "px; font-weight: bold; text-decoration: underline; text-shadow: 1px 2px 4px rgba(0,0,0,0.6);' onclick='event.stopPropagation()'>" + el.text + "</a>";
+            if (el.type === 'qr') return "      <div style='" + baseStyle + " background: white; padding: 8px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); pointer-events: none;'><img src='https://api.qrserver.com/v1/create-qr-code/?size=" + el.size + "x" + el.size + "&data=" + encodeURIComponent(el.content) + "' alt='QR Code' style='width: " + el.size + "px; height: " + el.size + "px; display: block;'></div>";
+            if (el.type === 'popup') return "      <div onclick=\"event.stopPropagation(); showPopup('" + encodeURIComponent(el.content) + "')\" style='" + baseStyle + " color: " + el.color + "; background-color: " + el.bgColor + "; font-size: " + el.fontSize + "px; font-weight: bold; padding: 8px 16px; border-radius: 9999px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; cursor: pointer; user-select: none;'>" + el.label + "</div>";
+            return "";
+          }).join('\n');
+          
+          pageHtml += elementsHtml + "\n    </div>";
+          return pageHtml;
+        });
+
+        const htmlFooter = [
+          pages.length > 1 ? "    <div id='nav-left' class='nav-arrow left' style='display: none;'>‹</div>\n    <div id='nav-right' class='nav-arrow right' style='display: block;'>›</div>\n    <div class='nav-dots'>\n" + pages.map((_, i) => "      <div id='dot-" + i + "' class='dot " + (i === 0 ? "active" : "") + "'></div>").join("\n") + "\n    </div>" : "",
+          "  </div>",
+          "  <button class='print-btn' onclick='window.print()' title='このカードを印刷する'>",
+          "    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><polyline points='6 9 6 2 18 2 18 9'></polyline><path d='M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2'></path><rect x='6' y='14' width='12' height='8'></rect></svg>",
+          "  </button>",
+          "  <div id='popup-backdrop' class='modal-backdrop' onclick='closePopup()'>",
+          "    <div class='modal-content' onclick='event.stopPropagation()'>",
+          "      <button class='close-btn' onclick='closePopup()'>×</button>",
+          "      <span class='icon'>💬</span>",
+          "      <p id='popup-text' style='color: #1f2937; font-size: 18px; line-height: 1.6; margin: 0; white-space: pre-wrap; font-family: sans-serif;'></p>",
+          "    </div>",
+          "  </div>",
+          "  <script>",
+          "    let currentPage = 0;",
+          "    const totalPages = " + pages.length + ";",
+          "    function updateNavUI() {",
+          "      if (totalPages <= 1) return;",
+          "      document.getElementById('nav-left').style.display = currentPage > 0 ? 'block' : 'none';",
+          "      document.getElementById('nav-right').style.display = currentPage < totalPages - 1 ? 'block' : 'none';",
+          "      for(let i=0; i<totalPages; i++) {",
+          "        document.getElementById('dot-'+i).className = i === currentPage ? 'dot active' : 'dot';",
+          "      }",
+          "    }",
+          "    function handleCardClick(event) {",
+          "      if (totalPages <= 1) return;",
+          "      if (event.target.closest('[onclick^=\"showPopup\"]') || event.target.tagName === 'A') return;",
+          "      const rect = event.currentTarget.getBoundingClientRect();",
+          "      const x = event.clientX - rect.left;",
+          "      const prevPage = currentPage;",
+          "      if (x > rect.width / 2 && currentPage < totalPages - 1) { currentPage++; } else if (x <= rect.width / 2 && currentPage > 0) { currentPage--; }",
+          "      if (prevPage !== currentPage) {",
+          "        document.getElementById('page-' + prevPage).style.opacity = '0';",
+          "        document.getElementById('page-' + prevPage).style.pointerEvents = 'none';",
+          "        document.getElementById('page-' + currentPage).style.opacity = '1';",
+          "        document.getElementById('page-' + currentPage).style.pointerEvents = 'auto';",
+          "        updateNavUI();",
+          "      }",
+          "    }",
+          "    function showPopup(encodedText) {",
+          "      document.getElementById('popup-text').innerText = decodeURIComponent(encodedText);",
+          "      document.getElementById('popup-backdrop').classList.add('active');",
+          "    }",
+          "    function closePopup() {",
+          "      document.getElementById('popup-backdrop').classList.remove('active');",
+          "    }",
+          "  <\/script>",
+          "</body>",
+          "</html>"
+        ];
+
+        const htmlContent = htmlLines.join('\n') + '\n' + htmlPages.join('\n') + '\n' + htmlFooter.join('\n');
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'birthday_card.html';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      };
+
+      const renderPropertiesPanel = () => {
+        const el = elements.find(e => e.id === selectedElementId);
+        if (!el) return null;
+
+        const update = (updates) => {
+          setElements(elements.map(e => e.id === selectedElementId ? { ...e, ...updates } : e));
+        };
+
+        return (
+          <div className="space-y-4 text-sm bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-medium text-gray-700">要素の編集</span>
+              <button onClick={deleteElement} className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1 bg-red-50 rounded px-2">
+                 <Trash2 className="w-4 h-4"/> 削除
+              </button>
+            </div>
+
+            {el.type === 'text' && (
+              <>
+                <div>
+                  <label className="block text-gray-600 mb-1">テキスト内容</label>
+                  <textarea value={el.content} onChange={e => update({content: e.target.value})} className="w-full p-2 border rounded shadow-sm focus:ring-2 focus:ring-pink-300 outline-none" rows={3}/>
+                </div>
+                <div className="flex gap-3">
+                   <div className="flex-1">
+                     <label className="block text-gray-600 mb-1">文字色</label>
+                     <input type="color" value={el.color} onChange={e => update({color: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/>
+                   </div>
+                   <div className="flex-1">
+                     <label className="block text-gray-600 mb-1">サイズ</label>
+                     <input type="number" value={el.fontSize} onChange={e => update({fontSize: Number(e.target.value)})} className="w-full p-1.5 border rounded shadow-sm focus:ring-2 focus:ring-pink-300 outline-none"/>
+                   </div>
+                </div>
+                
+                <div className="flex items-center gap-4 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={el.fontWeight === 'bold'} onChange={e => update({fontWeight: e.target.checked ? 'bold' : 'normal'})} className="rounded text-pink-500 focus:ring-pink-500"/>
+                    <span className="text-gray-600">太字</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={el.textDecoration === 'underline'} onChange={e => update({textDecoration: e.target.checked ? 'underline' : 'none'})} className="rounded text-pink-500 focus:ring-pink-500"/>
+                    <span className="text-gray-600 flex items-center gap-1"><Underline className="w-4 h-4"/> 下線</span>
+                  </label>
+                </div>
+                
+                <div className="flex gap-3 mt-3">
+                   <div className="flex-1">
+                     <label className="block text-gray-600 mb-1">背景色</label>
+                     <input type="color" value={el.bgColor || '#000000'} onChange={e => update({bgColor: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/>
+                   </div>
+                   <div className="flex-1">
+                     <label className="block text-gray-600 mb-1">背景の濃さ: {el.bgOpacity || 0}%</label>
+                     <input type="range" min="0" max="100" value={el.bgOpacity || 0} onChange={e => update({bgOpacity: Number(e.target.value)})} className="w-full accent-pink-500"/>
+                   </div>
+                </div>
+
+                <div className="mt-2">
+                  <label className="block text-gray-600 mb-1">文字の配置</label>
+                  <div className="flex gap-1 bg-gray-200 p-1 rounded-lg w-max">
+                    <button onClick={() => update({textAlign: 'left'})} className={`p-1.5 rounded ${el.textAlign === 'left' || !el.textAlign ? 'bg-white shadow text-pink-600' : 'text-gray-500 hover:bg-gray-300'}`}><AlignLeft className="w-4 h-4"/></button>
+                    <button onClick={() => update({textAlign: 'center'})} className={`p-1.5 rounded ${el.textAlign === 'center' ? 'bg-white shadow text-pink-600' : 'text-gray-500 hover:bg-gray-300'}`}><AlignCenter className="w-4 h-4"/></button>
+                    <button onClick={() => update({textAlign: 'right'})} className={`p-1.5 rounded ${el.textAlign === 'right' ? 'bg-white shadow text-pink-600' : 'text-gray-500 hover:bg-gray-300'}`}><AlignRight className="w-4 h-4"/></button>
+                  </div>
+                </div>
+              </>
+            )}
+            {el.type === 'bubble' && (
+              <>
+                <div>
+                  <label className="block text-gray-600 mb-1">セリフ内容</label>
+                  <textarea value={el.content} onChange={e => update({content: e.target.value})} className="w-full p-2 border rounded shadow-sm focus:ring-2 focus:ring-pink-300 outline-none" rows={3}/>
+                </div>
+                <div className="flex gap-3 mt-2">
+                  <div className="flex-1">
+                    <label className="block text-gray-600 mb-1 flex justify-between"><span>幅</span><span>{el.width}px</span></label>
+                    <input type="range" min="80" max="300" value={el.width} onChange={e => update({width: Number(e.target.value)})} className="w-full accent-pink-500"/>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-gray-600 mb-1 flex justify-between"><span>高さ</span><span>{el.height}px</span></label>
+                    <input type="range" min="50" max="300" value={el.height} onChange={e => update({height: Number(e.target.value)})} className="w-full accent-pink-500"/>
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-2">
+                   <div className="flex-1"><label className="block text-gray-600 mb-1 text-xs">文字色</label><input type="color" value={el.color} onChange={e => update({color: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                   <div className="flex-1"><label className="block text-gray-600 mb-1 text-xs">背景色</label><input type="color" value={el.bgColor} onChange={e => update({bgColor: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                   <div className="flex-1"><label className="block text-gray-600 mb-1 text-xs">枠線</label><input type="color" value={el.borderColor} onChange={e => update({borderColor: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                </div>
+                <div className="flex gap-3 mt-2">
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">文字サイズ</label><input type="number" value={el.fontSize} onChange={e => update({fontSize: Number(e.target.value)})} className="w-full p-1.5 border rounded shadow-sm focus:ring-2 focus:ring-pink-300 outline-none"/></div>
+                   <div className="flex-1">
+                     <label className="block text-gray-600 mb-1">しっぽの向き</label>
+                     <select value={el.tailPosition} onChange={e => update({tailPosition: e.target.value})} className="w-full p-1.5 border rounded shadow-sm focus:ring-2 focus:ring-pink-300 outline-none">
+                       <option value="bottom">下</option>
+                       <option value="top">上</option>
+                       <option value="left">左</option>
+                       <option value="right">右</option>
+                     </select>
+                   </div>
+                </div>
+              </>
+            )}
+            {el.type === 'image' && (
+              <>
+                <div>
+                  <label className="block text-gray-600 mb-1 flex justify-between">
+                    <span>枠の幅</span>
+                    <span>{el.width}px</span>
+                  </label>
+                  <input type="range" min="50" max="300" value={el.width} onChange={e => update({width: Number(e.target.value)})} className="w-full accent-pink-500"/>
+                </div>
+                {el.shape !== 'circle' && (
+                  <div>
+                    <label className="block text-gray-600 mb-1 flex justify-between">
+                      <span>枠の高さ</span>
+                      <span>{el.height || el.width}px</span>
+                    </label>
+                    <input type="range" min="50" max="300" value={el.height || el.width} onChange={e => update({height: Number(e.target.value)})} className="w-full accent-pink-500"/>
+                  </div>
+                )}
+                <div className="mt-2">
+                  <label className="block text-gray-600 mb-1">枠の形状</label>
+                  <div className="flex gap-2 bg-gray-200 p-1 rounded-lg">
+                    <button onClick={() => update({shape: 'rect'})} className={`flex-1 py-1 text-xs font-bold rounded ${el.shape === 'rect' || !el.shape ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>四角</button>
+                    <button onClick={() => update({shape: 'rounded'})} className={`flex-1 py-1 text-xs font-bold rounded ${el.shape === 'rounded' ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>角丸</button>
+                    <button onClick={() => update({shape: 'circle'})} className={`flex-1 py-1 text-xs font-bold rounded ${el.shape === 'circle' ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>丸</button>
+                  </div>
+                </div>
+                
+                <div className="mt-4 pt-3 border-t border-gray-200">
+                  <h3 className="font-bold text-gray-700 text-sm mb-3">枠内の画像調整（トリミング）</h3>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1 flex justify-between">
+                      <span>ズーム（拡大）</span>
+                      <span>{Math.round((el.scale || 1) * 100)}%</span>
+                    </label>
+                    <input type="range" min="1" max="3" step="0.1" value={el.scale || 1} onChange={e => update({scale: Number(e.target.value)})} className="w-full accent-orange-500"/>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-600 mb-1 flex justify-between">
+                      <span>表示位置 (左右)</span>
+                    </label>
+                    <input type="range" min="0" max="100" value={el.posX !== undefined ? el.posX : 50} onChange={e => update({posX: Number(e.target.value)})} className="w-full accent-orange-500"/>
+                  </div>
+                  <div className="mt-3">
+                    <label className="block text-xs text-gray-600 mb-1 flex justify-between">
+                      <span>表示位置 (上下)</span>
+                    </label>
+                    <input type="range" min="0" max="100" value={el.posY !== undefined ? el.posY : 50} onChange={e => update({posY: Number(e.target.value)})} className="w-full accent-orange-500"/>
+                  </div>
+                </div>
+              </>
+            )}
+            {el.type === 'link' && (
+              <>
+                <div><label className="block text-gray-600 mb-1">URL (リンク先)</label><input type="url" value={el.content} onChange={e => update({content: e.target.value})} className="w-full p-2 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-300"/></div>
+                <div><label className="block text-gray-600 mb-1">表示テキスト</label><input type="text" value={el.text} onChange={e => update({text: e.target.value})} className="w-full p-2 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-300"/></div>
+                <div className="flex gap-3">
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">文字色</label><input type="color" value={el.color} onChange={e => update({color: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">サイズ</label><input type="number" value={el.fontSize} onChange={e => update({fontSize: Number(e.target.value)})} className="w-full p-1.5 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-300"/></div>
+                </div>
+              </>
+            )}
+            {el.type === 'qr' && (
+              <>
+                <div>
+                  <label className="block text-gray-600 mb-1">URL または メッセージ内容</label>
+                  <textarea value={el.content} onChange={e => update({content: e.target.value})} className="w-full p-2 border rounded shadow-sm outline-none focus:ring-2 focus:ring-blue-300" rows={4} placeholder="URLやテキストを入力してください"/>
+                </div>
+                <div><label className="block text-gray-600 mb-1 flex justify-between"><span>QRサイズ</span><span>{el.size}px</span></label><input type="range" min="50" max="250" value={el.size} onChange={e => update({size: Number(e.target.value)})} className="w-full accent-blue-600"/></div>
+              </>
+            )}
+            {el.type === 'popup' && (
+              <>
+                <div><label className="block text-gray-600 mb-1">ボタンの文字</label><input type="text" value={el.label} onChange={e => update({label: e.target.value})} className="w-full p-2 border rounded shadow-sm outline-none focus:ring-2 focus:ring-purple-300"/></div>
+                <div><label className="block text-gray-600 mb-1">隠しメッセージ内容</label><textarea value={el.content} onChange={e => update({content: e.target.value})} className="w-full p-2 border rounded shadow-sm focus:ring-2 focus:ring-purple-300 outline-none" rows={3}/></div>
+                <div className="flex gap-3">
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">文字色</label><input type="color" value={el.color} onChange={e => update({color: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">背景色</label><input type="color" value={el.bgColor} onChange={e => update({bgColor: e.target.value})} className="w-full h-8 cursor-pointer rounded border"/></div>
+                   <div className="flex-1"><label className="block text-gray-600 mb-1">サイズ</label><input type="number" value={el.fontSize} onChange={e => update({fontSize: Number(e.target.value)})} className="w-full p-1.5 border rounded shadow-sm outline-none focus:ring-2 focus:ring-purple-300"/></div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      };
+
+      const renderElement = (el) => {
+        const isSelected = selectedElementId === el.id && !isPreviewMode;
+        const baseStyle = {
+          position: 'absolute', left: `${el.x}px`, top: `${el.y}px`, cursor: isPreviewMode ? (el.type === 'link' ? 'pointer' : 'default') : 'move',
+          userSelect: 'none', border: isSelected ? '2px dashed #ec4899' : '2px solid transparent', padding: '4px', boxSizing: 'border-box',
+          textShadow: (el.type === 'text' || el.type === 'link') ? '1px 2px 4px rgba(0,0,0,0.6)' : 'none', zIndex: isSelected ? 10 : 1
+        };
+
+        const renderDeleteButton = (id) => {
+          if (!isSelected) return null;
+          return (
+            <div
+              onMouseDown={(e) => { e.stopPropagation(); deleteElement(); }}
+              onTouchStart={(e) => { e.stopPropagation(); deleteElement(); }}
+              className="absolute -top-3 -right-3 bg-red-500 text-white rounded-full shadow-md hover:bg-red-600 transition-colors z-50 flex items-center justify-center border-2 border-white cursor-pointer"
+              style={{ width: '26px', height: '26px' }}
+              title="削除"
+            >
+              <X className="w-3 h-3" />
+            </div>
+          );
+        };
+
+        if (el.type === 'text') {
+          const lh = Math.round(el.fontSize * 1.4);
+          return (
+            <div key={el.id} style={{ ...baseStyle, color: el.color, backgroundColor: hexToRgba(el.bgColor, el.bgOpacity), borderRadius: '8px', padding: '4px', fontSize: `${el.fontSize}px`, fontWeight: el.fontWeight, textDecoration: el.textDecoration || 'none', textAlign: el.textAlign || 'left', whiteSpace: 'pre-wrap', lineHeight: `${lh}px` }}
+                 onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} onClick={(e) => e.stopPropagation()}>
+              {el.content}
+              {renderDeleteButton(el.id)}
+            </div>
+          );
+        }
+        if (el.type === 'image') {
+          const h = el.shape === 'circle' ? el.width : (el.height || el.width);
+          const br = el.shape === 'circle' ? '50%' : (el.shape === 'rounded' ? '16px' : '0');
+          const px = el.posX !== undefined ? el.posX : 50;
+          const py = el.posY !== undefined ? el.posY : 50;
+          const sc = el.scale || 1;
+            
+          let imgStyle = {};
+          if (el.originalWidth && el.originalHeight) {
+            const imgAspect = el.originalWidth / el.originalHeight;
+            const containerAspect = el.width / h;
+            let drawW, drawH;
+            if (imgAspect > containerAspect) {
+              drawH = h;
+              drawW = h * imgAspect;
+            } else {
+              drawW = el.width;
+              drawH = el.width / imgAspect;
+            }
+            drawW *= sc;
+            drawH *= sc;
+            const left = - (drawW - el.width) * (px / 100);
+            const top = - (drawH - h) * (py / 100);
+            
+            imgStyle = { position: 'absolute', left: `${left}px`, top: `${top}px`, width: `${drawW}px`, height: `${drawH}px`, maxWidth: 'none', maxHeight: 'none', objectFit: 'fill', pointerEvents: 'none' };
+          } else {
+            imgStyle = { width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${px}% ${py}%`, transform: `scale(${sc})`, transformOrigin: `${px}% ${py}%`, pointerEvents: 'none', display: 'block' };
+          }
+
+          return (
+            <div key={el.id} style={{ ...baseStyle, padding: 0, width: `${el.width}px`, height: `${h}px`, border: isSelected ? '2px dashed #ec4899' : '2px solid transparent' }}
+                 onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} onClick={(e) => e.stopPropagation()}>
+              <div style={{ width: '100%', height: '100%', borderRadius: br, overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', position: 'relative' }}>
+                 <img src={el.content} alt="Element" draggable="false" style={imgStyle}
+                      onLoad={(e) => {
+                        if (!el.originalWidth || !el.originalHeight) {
+                          const natW = e.target.naturalWidth;
+                          const natH = e.target.naturalHeight;
+                          setPages(prevPages => {
+                            const newPages = [...prevPages];
+                            const page = newPages[currentPageIndex];
+                            if (page) {
+                              page.elements = page.elements.map(item => item.id === el.id ? { ...item, originalWidth: natW, originalHeight: natH } : item);
+                            }
+                            return newPages;
+                          });
+                        }
+                      }} 
+                 />
+              </div>
+              {renderDeleteButton(el.id)}
+            </div>
+          );
+        }
+        if (el.type === 'bubble') {
+          let tailSvg = null;
+          if (el.tailPosition === 'bottom') {
+            tailSvg = (
+              <svg width="24" height="16" style={{ position: 'absolute', bottom: '-15px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+                <path d="M 2,0 L 12,14 L 22,0" fill={el.bgColor} stroke={el.borderColor} strokeWidth="3" strokeLinejoin="round" />
+                <line x1="2" y1="0" x2="22" y2="0" stroke={el.bgColor} strokeWidth="4" />
+              </svg>
+            );
+          } else if (el.tailPosition === 'top') {
+            tailSvg = (
+              <svg width="24" height="16" style={{ position: 'absolute', top: '-15px', left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none' }}>
+                <path d="M 2,16 L 12,2 L 22,16" fill={el.bgColor} stroke={el.borderColor} strokeWidth="3" strokeLinejoin="round" />
+                <line x1="2" y1="16" x2="22" y2="16" stroke={el.bgColor} strokeWidth="4" />
+              </svg>
+            );
+          } else if (el.tailPosition === 'left') {
+            tailSvg = (
+              <svg width="16" height="24" style={{ position: 'absolute', left: '-15px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <path d="M 16,2 L 2,12 L 16,22" fill={el.bgColor} stroke={el.borderColor} strokeWidth="3" strokeLinejoin="round" />
+                <line x1="16" y1="2" x2="16" y2="22" stroke={el.bgColor} strokeWidth="4" />
+              </svg>
+            );
+          } else if (el.tailPosition === 'right') {
+            tailSvg = (
+              <svg width="16" height="24" style={{ position: 'absolute', right: '-15px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <path d="M 0,2 L 14,12 L 0,22" fill={el.bgColor} stroke={el.borderColor} strokeWidth="3" strokeLinejoin="round" />
+                <line x1="0" y1="2" x2="0" y2="22" stroke={el.bgColor} strokeWidth="4" />
+              </svg>
+            );
+          }
+
+          const lh = Math.round(el.fontSize * 1.2);
+          return (
+            <div key={el.id} style={{ ...baseStyle, width: `${el.width}px`, height: `${el.height}px`, border: isSelected ? '2px dashed #ec4899' : '2px solid transparent' }}
+                 onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} onClick={(e) => e.stopPropagation()}>
+              <div style={{ position: 'relative', width: '100%', height: '100%', backgroundColor: el.bgColor, border: `3px solid ${el.borderColor}`, borderRadius: '24px', padding: '12px', boxSizing: 'border-box', color: el.color, fontSize: `${el.fontSize}px`, fontWeight: 'bold', textAlign: 'center', whiteSpace: 'pre-wrap', lineHeight: `${lh}px`, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                {tailSvg}
+                <div style={{ position: 'absolute', top: '50%', left: '12px', right: '12px', transform: 'translateY(-50%)' }}>
+                  {el.content}
+                </div>
+              </div>
+              {renderDeleteButton(el.id)}
+            </div>
+          );
+        }
+        if (el.type === 'link') {
+          return (
+            <a key={el.id} href={el.content} target="_blank" rel="noopener noreferrer" style={{ ...baseStyle, color: el.color, fontSize: `${el.fontSize}px`, textDecoration: 'underline', fontWeight: 'bold' }}
+               onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} onClick={(e) => { e.stopPropagation(); if (!isPreviewMode) e.preventDefault(); }}>
+              {el.text}
+              {renderDeleteButton(el.id)}
+            </a>
+          );
+        }
+        if (el.type === 'qr') {
+          return (
+            <div key={el.id} style={{...baseStyle, background: 'white', padding: '8px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)'}} 
+                 onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} onClick={(e) => e.stopPropagation()}>
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=${el.size}x${el.size}&data=${encodeURIComponent(el.content)}`} alt="QR Code" crossOrigin="anonymous" style={{ width: `${el.size}px`, height: `${el.size}px`, pointerEvents: 'none' }} />
+              {renderDeleteButton(el.id)}
+            </div>
+          );
+        }
+        if (el.type === 'popup') {
+          return (
+            <div key={el.id} style={{ ...baseStyle, color: el.color, backgroundColor: el.bgColor, fontSize: `${el.fontSize}px`, fontWeight: 'bold', padding: '8px 16px', borderRadius: '9999px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', textAlign: 'center' }}
+                 onMouseDown={(e) => handlePointerDown(e, el.id)} onTouchStart={(e) => handlePointerDown(e, el.id)} 
+                 onClick={(e) => { e.stopPropagation(); if (isPreviewMode) setActivePopupMessage(el.content); }}>
+              {el.label}
+              {renderDeleteButton(el.id)}
+            </div>
+          );
+        }
+      };
+
+      return (
+        <div className="flex flex-col md:flex-row h-screen bg-gray-100 font-sans text-gray-800">
+          
+          {/* 左サイドバー */}
+          <div className="w-full md:w-80 bg-white p-5 border-r border-gray-200 overflow-y-auto flex flex-col gap-6 shadow-sm z-20">
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+               <ImageIcon className="w-7 h-7 text-pink-500"/> デジポ・メーカー
+            </h1>
+            
+            {/* ページ管理 */}
+            <section className="bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-inner">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-sm font-bold text-gray-700 flex items-center gap-1"><Layers className="w-4 h-4"/> ページ管理</h2>
+                <button onClick={addPage} className="text-pink-600 text-xs flex items-center gap-1 hover:bg-pink-100 px-2 py-1 rounded transition-colors font-bold">
+                  <Plus className="w-3 h-3"/> 追加
+                </button>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin">
+                {pages.map((p, i) => (
+                  <div key={p.id} onClick={() => { setCurrentPageIndex(i); setSelectedElementId(null); }}
+                       className={`relative w-16 h-24 shrink-0 rounded-lg border-2 cursor-pointer overflow-hidden transition-all ${currentPageIndex === i ? 'border-pink-500 shadow-md ring-2 ring-pink-200' : 'border-gray-300 hover:border-pink-300 opacity-70 hover:opacity-100'}`}>
+                    <div style={{ backgroundColor: p.bgType === 'color' ? p.bgColor : (p.bgType === 'none' ? 'transparent' : '#ffffff'), backgroundImage: p.bgType === 'image' || !p.bgType ? `url(${p.background})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', width: '100%', height: '100%' }}></div>
+                    <div className="absolute bottom-0 w-full bg-black/70 text-white text-[10px] text-center py-0.5 font-bold">{i + 1}</div>
+                    {pages.length > 1 && (
+                       <button onClick={(e) => { e.stopPropagation(); deletePage(i); }} className="absolute top-0 right-0 bg-red-500 text-white p-0.5 rounded-bl hover:bg-red-600 transition-colors">
+                         <X className="w-3 h-3" />
+                       </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* 背景変更 */}
+            <section className="bg-gray-50 p-3 rounded-xl border border-gray-200 shadow-inner">
+               <div className="flex justify-between items-center mb-2">
+                 <h2 className="text-sm font-bold text-gray-700 flex items-center gap-1"><ImageIcon className="w-4 h-4"/> 背景を変更</h2>
+               </div>
+
+               <div className="flex gap-2 mb-3 bg-gray-200 p-1 rounded-lg">
+                 <button onClick={() => setBgType('image')} className={`flex-1 py-1 text-xs font-bold rounded ${bgType === 'image' || !bgType ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>画像</button>
+                 <button onClick={() => setBgType('color')} className={`flex-1 py-1 text-xs font-bold rounded ${bgType === 'color' ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>カラー</button>
+                 <button onClick={() => setBgType('none')} className={`flex-1 py-1 text-xs font-bold rounded ${bgType === 'none' ? 'bg-white shadow text-pink-600' : 'text-gray-500'}`}>なし(透明)</button>
+               </div>
+
+               {bgType === 'image' || !bgType ? (
+                 <>
+                   <button onClick={() => bgInputRef.current?.click()} className="w-full mb-2 text-pink-600 text-xs flex items-center justify-center gap-1 hover:bg-pink-100 px-2 py-1.5 rounded transition-colors font-bold border border-pink-200 bg-white shadow-sm">
+                     <ImageIcon className="w-3 h-3"/> 画像をアップロード
+                   </button>
+                   <input type="file" accept="image/*" ref={bgInputRef} onChange={handleBgUpload} className="hidden" />
+                   <div className="grid grid-cols-2 gap-2">
+                     {bgPresets.map((bg, i) => (
+                       <img key={i} src={bg} alt="Background preset" onClick={() => setPageBackground('image', bg)}
+                            className={`w-full h-16 object-cover rounded cursor-pointer border-2 transition-all ${background === bg ? 'border-pink-500 opacity-100' : 'border-transparent opacity-70 hover:opacity-100'}`} />
+                     ))}
+                   </div>
+                 </>
+               ) : bgType === 'color' ? (
+                 <div>
+                   <label className="block text-xs text-gray-600 mb-1">背景色を選択</label>
+                   <input type="color" value={bgColor} onChange={(e) => setPageBackground('color', e.target.value)} className="w-full h-10 cursor-pointer rounded border"/>
+                 </div>
+               ) : (
+                 <div className="text-center py-4 text-gray-500 text-xs">
+                   背景が透明になります。<br/>(画像で保存する際に背景が透過されます)
+                 </div>
+               )}
+            </section>
+
+            <section>
+               <div className="flex gap-2">
+                 <button onClick={addText} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-50 shadow-sm"><Type className="w-4 h-4 text-pink-500"/> 文字</button>
+                 <button onClick={addBubble} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-50 shadow-sm"><MessageSquare className="w-4 h-4 text-pink-500"/> 吹き出し</button>
+               </div>
+            </section>
+
+            {/* 任意の画像追加機能 */}
+            <section className="bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+               <h2 className="font-bold text-orange-800 flex items-center gap-2 mb-3 text-sm"><ImageIcon className="w-4 h-4"/> 画像を配置する</h2>
+               <button onClick={() => imageElementInputRef.current?.click()} className="w-full bg-orange-500 text-white py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-orange-600 text-sm shadow-sm transition-colors">
+                 <Plus className="w-4 h-4"/> 任意の画像を選択
+               </button>
+               <input type="file" accept="image/*" ref={imageElementInputRef} onChange={handleImageElementUpload} className="hidden" />
+            </section>
+
+            {/* テキストQR機能を追加 */}
+            <section className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
+               <h2 className="font-bold text-emerald-800 flex items-center gap-2 mb-3 text-sm"><QrCode className="w-4 h-4"/> 隠しメッセージ(QR)を追加</h2>
+               <p className="text-[10px] text-emerald-700 mb-2 leading-relaxed">
+                 QRコードに長文のテキストを埋め込みます。<br/>
+                 <span className="font-bold">画像として保存してLINEで送った後、相手が画像を長押しする</span>とテキストを画面に表示できます！
+               </p>
+               <div className="space-y-3">
+                 <div><textarea value={inputTextQR} onChange={e => setInputTextQR(e.target.value)} placeholder="長文メッセージを入力..." className="w-full p-2 text-sm border rounded outline-none focus:ring-2 focus:ring-emerald-400" rows={3} /></div>
+                 <button onClick={addTextQR} className="w-full bg-emerald-600 text-white py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-emerald-700 text-sm shadow-sm transition-colors"><QrCode className="w-4 h-4"/> メッセージQRを配置</button>
+               </div>
+            </section>
+
+            <section className="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+               <h2 className="font-bold text-blue-800 flex items-center gap-2 mb-3 text-sm"><LinkIcon className="w-4 h-4"/> サイトURLを追加する</h2>
+               <div className="space-y-3">
+                 <div><label className="text-xs text-blue-700 mb-1 block">サイトのURL</label><input type="url" value={inputUrl} onChange={e => setInputUrl(e.target.value)} placeholder="https://..." className="w-full p-2 text-sm border rounded" /></div>
+                 <div><label className="text-xs text-blue-700 mb-1 block">リンクの表示テキスト</label><input type="text" value={inputLinkText} onChange={e => setInputLinkText(e.target.value)} placeholder="クリックしてね" className="w-full p-2 text-sm border rounded" /></div>
+                 <div className="flex gap-2 pt-1">
+                   <button onClick={addQR} className="flex-1 bg-white border border-blue-300 text-blue-700 py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-blue-50 text-sm"><QrCode className="w-4 h-4"/> URL(QR)</button>
+                   <button onClick={addLink} className="flex-1 bg-blue-600 text-white py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-blue-700 text-sm"><LinkIcon className="w-4 h-4"/> リンク</button>
+                 </div>
+               </div>
+            </section>
+            
+            <section className="bg-purple-50/50 p-4 rounded-xl border border-purple-100">
+               <h2 className="font-bold text-purple-800 flex items-center gap-2 mb-3 text-sm"><MessageCircle className="w-4 h-4"/> Web用ポップアップを追加</h2>
+               <p className="text-[10px] text-purple-700 mb-2">※HTMLとして書き出してURL共有した場合のみ動きます</p>
+               <div className="space-y-3">
+                 <div><label className="text-xs text-purple-700 mb-1 block">ボタンの文字</label><input type="text" value={inputPopupLabel} onChange={e => setInputPopupLabel(e.target.value)} className="w-full p-2 text-sm border rounded" /></div>
+                 <div><label className="text-xs text-purple-700 mb-1 block">表示するメッセージ</label><textarea value={inputPopupMessage} onChange={e => setInputPopupMessage(e.target.value)} className="w-full p-2 text-sm border rounded" rows={2} /></div>
+                 <button onClick={addPopup} className="w-full bg-purple-600 text-white py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-purple-700 text-sm"><Plus className="w-4 h-4"/> ポップアップボタン配置</button>
+               </div>
+            </section>
+
+            {/* データ管理機能 (エクスポート/インポート) */}
+            <section className="bg-gray-50 p-4 rounded-xl border border-gray-200 shadow-inner">
+               <h2 className="font-bold text-gray-700 flex items-center gap-2 mb-3 text-sm"><Layers className="w-4 h-4"/> データ管理</h2>
+               <p className="text-[10px] text-gray-500 mb-2">編集中の状態をファイルに保存・復元できます。</p>
+               <div className="flex gap-2">
+                 <button onClick={exportProjectData} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-100 text-sm transition-colors shadow-sm">
+                   <Download className="w-4 h-4"/> 保存
+                 </button>
+                 <button onClick={() => fileInputRef.current?.click()} className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg flex items-center justify-center gap-1 hover:bg-gray-100 text-sm transition-colors shadow-sm">
+                   <FileText className="w-4 h-4"/> 読込
+                 </button>
+                 <input type="file" accept=".json" ref={fileInputRef} onChange={importProjectData} className="hidden" />
+               </div>
+            </section>
+
+            {selectedElementId && (
+              <section className="mt-auto border-t border-gray-100 pt-4 pb-10">
+                {renderPropertiesPanel()}
+              </section>
+            )}
+          </div>
+
+          {/* メインエリア */}
+          <div className="flex-1 flex flex-col relative" onMouseMove={handlePointerMove} onTouchMove={handlePointerMove} onMouseUp={handlePointerUp} onTouchEnd={handlePointerUp} onMouseLeave={handlePointerUp}>
+            
+            {/* 上部ツールバー */}
+            <div className="h-16 bg-white border-b border-gray-200 px-6 flex items-center justify-between shadow-sm z-10 shrink-0">
+               <div className="flex items-center gap-3 text-sm">
+                 {isPreviewMode ? (
+                   <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium flex items-center gap-1"><Eye className="w-4 h-4"/> プレビュー中</span>
+                 ) : (
+                   <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium flex items-center gap-1"><Edit2 className="w-4 h-4"/> 編集モード ({currentPageIndex + 1}ページ目)</span>
+                 )}
+                 <span className="text-gray-500 hidden sm:inline">
+                   {isPreviewMode ? '左右をクリックしてページをめくります' : '文字や画像をドラッグして自由に配置できます'}
+                 </span>
+               </div>
+               
+               <div className="flex items-center gap-2">
+                 <button onClick={generateShareLink} title="リンクで送る" className="px-3 py-2 rounded-lg flex items-center gap-1 font-medium bg-green-50 text-green-600 border border-green-200 hover:bg-green-100">
+                   <Share2 className="w-4 h-4"/> <span className="hidden sm:inline">リンク</span>
+                 </button>
+                 <button onClick={exportImage} title="今のページを画像で保存" className="px-3 py-2 rounded-lg flex items-center gap-1 font-medium bg-orange-50 text-orange-600 border border-orange-200 hover:bg-orange-100">
+                   <Camera className="w-4 h-4"/> <span className="hidden sm:inline">画像</span>
+                 </button>
+                 <button onClick={exportPDF} title="全ページをPDFで保存" className="px-3 py-2 rounded-lg flex items-center gap-1 font-medium bg-red-50 text-red-600 border border-red-200 hover:bg-red-100">
+                   <FileText className="w-4 h-4"/> <span className="hidden sm:inline">PDF</span>
+                 </button>
+                 <button onClick={printCard} title="全ページを印刷する" className="px-3 py-2 rounded-lg flex items-center gap-1 font-medium bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100">
+                   <FileText className="w-4 h-4"/> <span className="hidden sm:inline">印刷</span>
+                 </button>
+                 <button onClick={exportHTML} title="遊べるカード(HTML)で保存" className="px-3 py-2 rounded-lg flex items-center gap-1 font-medium bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100">
+                   <Download className="w-4 h-4"/> <span className="hidden sm:inline">HTML</span>
+                 </button>
+                 
+                 <button onClick={() => {
+                           if (isPreviewMode) { setIsPreviewMode(false); setActivePopupMessage(null); } 
+                           else { setIsPreviewMode(true); setSelectedElementId(null); }
+                         }}
+                         className={`px-4 py-2 rounded-lg flex items-center gap-1 font-medium ${isPreviewMode ? 'bg-white border-2 border-pink-500 text-pink-600 hover:bg-pink-50' : 'bg-pink-500 text-white hover:bg-pink-600'}`}>
+                   {isPreviewMode ? <Edit2 className="w-4 h-4"/> : <Eye className="w-4 h-4"/>}
+                   <span className="hidden sm:inline">{isPreviewMode ? '編集に戻る' : 'プレビュー'}</span>
+                 </button>
+               </div>
+            </div>
+
+            {/* キャンバスエリア */}
+            <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-200 p-8" style={{ touchAction: 'none' }}>
+               <div className="relative shadow-2xl rounded-xl overflow-hidden" style={{ width: '400px', height: '600px', margin: 'auto', backgroundImage: 'url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAMUlEQVQ4T2NkYGAQYcAP3uCTZSA4mIAIBwYDnwb8gAExGg0jIxwMEePA4O7E0+0ABQCeJgP3TqFm1QAAAABJRU5ErkJggg==")' }}>
+                 <div id="canvas-capture-area" ref={canvasRef} 
+                      className={`relative w-full h-full transition-all overflow-hidden rounded-xl ${isPreviewMode && pages.length > 1 ? 'cursor-pointer' : ''}`}
+                      style={{ 
+                        backgroundColor: bgType === 'color' ? bgColor : (bgType === 'none' ? 'transparent' : '#ffffff'),
+                        backgroundImage: bgType === 'image' || !bgType ? `url(${background})` : 'none',
+                        backgroundSize: 'cover', backgroundPosition: 'center',
+                        fontFamily: '"Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif'
+                      }}
+                      onClick={(e) => {
+                        if (!isPreviewMode) {
+                          setSelectedElementId(null);
+                        } else if (pages.length > 1) {
+                          const rect = canvasRef.current.getBoundingClientRect();
+                          const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+                          if (x > rect.width / 2 && currentPageIndex < pages.length - 1) {
+                            setCurrentPageIndex(currentPageIndex + 1);
+                          } else if (x <= rect.width / 2 && currentPageIndex > 0) {
+                            setCurrentPageIndex(currentPageIndex - 1);
+                          }
+                        }
+                      }}
+                 >
+                    {/* 編集画面でも背景が「画像」の時のみ黒い影を表示する */}
+                    {(bgType === 'image' || !bgType) && (
+                      <div className="absolute inset-0 bg-black/20 pointer-events-none"></div>
+                    )}
+                    
+                    {elements.map(el => renderElement(el))}
+
+                    {isPreviewMode && pages.length > 1 && (
+                      <>
+                        {currentPageIndex > 0 && <div className="absolute left-2 top-1/2 -translate-y-1/2 text-white/70 text-5xl pointer-events-none drop-shadow-md z-20"><ChevronLeft className="w-10 h-10"/></div>}
+                        {currentPageIndex < pages.length - 1 && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-white/70 text-5xl pointer-events-none drop-shadow-md z-20"><ChevronRight className="w-10 h-10"/></div>}
+                        
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20 pointer-events-none">
+                          {pages.map((_, i) => (
+                            <div key={i} className={`w-2 h-2 rounded-full transition-all ${i === currentPageIndex ? 'bg-white shadow-[0_0_4px_rgba(0,0,0,0.5)] scale-125' : 'bg-white/40'}`}></div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {activePopupMessage && isPreviewMode && (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 z-50 transition-opacity" onClick={() => setActivePopupMessage(null)}>
+                        <div className="bg-white rounded-2xl p-6 shadow-2xl w-full max-w-sm transform transition-all text-center relative" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setActivePopupMessage(null)} className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                          <MessageCircle className="w-12 h-12 text-pink-500 mx-auto mb-4" />
+                          <p className="text-gray-800 text-lg whitespace-pre-wrap leading-relaxed">{activePopupMessage}</p>
+                        </div>
+                      </div>
+                    )}
+                 </div>
+               </div>
+            </div>
+          </div>
+
+          {toastMessage && (
+            <div className="fixed bottom-6 right-6 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-xl z-50 flex items-center gap-2 transition-all">
+              {toastMessage}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // アプリを起動
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
