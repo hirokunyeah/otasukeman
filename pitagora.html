@@ -150,7 +150,10 @@
 </div>
 
 <div class="panel" id="help">
-  🖱 ドラッグ: 視点回転 / パーツ移動<br>
+  🖱 左ドラッグ: パーツ移動 / 選択<br>
+  🖱 中ボタンドラッグ: 視点回転<br>
+  🖱 Shift+中ボタンドラッグ: 視点の中心を移動<br>
+  ダブルクリック: そこを視点の中心にする<br>
   ホイール: ズーム<br>
   パーツをクリックして選択 → 右のボタンで調整<br>
   <b>キーを押しながらマウスを動かす</b>と直感操作:<br>
@@ -1227,10 +1230,21 @@ function updateCamera() {
   camera.lookAt(camTarget);
 }
 updateCamera();
+function panCamera(dx, dy) {
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  const scale = camR * 0.0015;
+  camTarget.addScaledVector(right, -dx * scale);
+  camTarget.addScaledVector(up, dy * scale);
+  camTarget.x = Math.max(-60, Math.min(60, camTarget.x));
+  camTarget.y = Math.max(-20, Math.min(40, camTarget.y));
+  camTarget.z = Math.max(-60, Math.min(60, camTarget.z));
+  updateCamera();
+}
 
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-let dragMode = null; // "orbit" | "part"
+let dragMode = null; // "orbit" | "pan" | "part"
 let dragPart = null, dragPlane = new THREE.Plane(), dragOffset = new THREE.Vector3();
 let lastPX = 0, lastPY = 0;
 
@@ -1244,13 +1258,19 @@ cv.addEventListener("pointerdown", e => {
   cv.setPointerCapture(e.pointerId);
   setMouse(e);
   lastPX = e.clientX; lastPY = e.clientY;
+  if (e.button === 1) { // 中ボタン: 回転 (Shift+中ボタン: パン)
+    e.preventDefault();
+    dragMode = e.shiftKey ? "pan" : "orbit";
+    return;
+  }
+  if (e.button !== 0) return; // 左ボタン以外はここでは扱わない
   if (!running) {
     ray.setFromCamera(mouse, camera);
     const hits = ray.intersectObjects(parts.map(p => p.mesh), true);
     if (hits.length) {
       let o = hits[0].object, p = null;
       while (o && !(p = parts.find(pp => pp.mesh === o))) o = o.parent;
-      if (!p || p.locked) { dragMode = "orbit"; return; } // 固定パーツは動かせない
+      if (!p || p.locked) return; // 固定パーツは動かせない
       select(p);
       dragMode = "part"; dragPart = p;
       dragPlane.set(new THREE.Vector3(0, 1, 0), -p.mesh.position.y);
@@ -1261,7 +1281,6 @@ cv.addEventListener("pointerdown", e => {
     }
     select(null);
   }
-  dragMode = "orbit";
 });
 cv.addEventListener("pointermove", e => {
   if (!dragMode) return;
@@ -1271,6 +1290,9 @@ cv.addEventListener("pointermove", e => {
     camPhi -= (e.clientY - lastPY) * 0.005;
     lastPX = e.clientX; lastPY = e.clientY;
     updateCamera();
+  } else if (dragMode === "pan") {
+    panCamera(e.clientX - lastPX, e.clientY - lastPY);
+    lastPX = e.clientX; lastPY = e.clientY;
   } else if (dragMode === "part" && dragPart) {
     ray.setFromCamera(mouse, camera);
     const hitPt = new THREE.Vector3();
@@ -1284,6 +1306,19 @@ cv.addEventListener("pointermove", e => {
   }
 });
 cv.addEventListener("pointerup", () => { if (dragMode === "part") saveEditor(); dragMode = null; dragPart = null; });
+cv.addEventListener("dblclick", e => {
+  if (heldKey) return;
+  setMouse(e);
+  ray.setFromCamera(mouse, camera);
+  const targets = [voidPlane];
+  levelStatics.forEach(s => s.meshes.forEach(m => targets.push(m)));
+  parts.forEach(p => targets.push(p.mesh));
+  const hits = ray.intersectObjects(targets, true);
+  if (hits.length) {
+    camTarget.copy(hits[0].point);
+    updateCamera();
+  }
+});
 
 // ============ モーダル操作 (キーを押しながらマウスを動かす) ============
 const MODAL = {
