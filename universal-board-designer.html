@@ -161,6 +161,7 @@
             ArrowRight: <><line x1="5" x2="19" y1="12" y2="12" /><polyline points="12 5 19 12 12 19" /></>,
             Move: <><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 15 22 12 19 9" /><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /></>,
             List: <><line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" /><line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" /></>,
+            Junction: <><line x1="2" x2="22" y1="12" y2="12" /><line x1="12" x2="12" y1="2" y2="22" /><circle cx="12" cy="12" r="4" fill="currentColor" /></>,
             Printer: <><polyline points="6 9 6 2 18 2 18 9" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" /></>
         };
 
@@ -315,123 +316,111 @@
             });
         };
 
-        const buildConnectionGraph = (components, wires, boardConfig) => {
+        // 部品ピン・配線端点・接続点が占める範囲（グリッド座標）。何もなければ null
+        const getContentBounds = (components, wires, gridSize, junctions = []) => {
+            const points = [];
+            components.forEach(comp => points.push(...getComponentPinCoords(comp, gridSize)));
+            wires.forEach(w => points.push({ x: w.startX, y: w.startY }, { x: w.endX, y: w.endY }));
+            junctions.forEach(j => points.push({ x: j.x, y: j.y }));
+            if (points.length === 0) return null;
+            return {
+                minX: Math.min(...points.map(p => p.x)),
+                minY: Math.min(...points.map(p => p.y)),
+                maxX: Math.max(...points.map(p => p.x)),
+                maxY: Math.max(...points.map(p => p.y))
+            };
+        };
+
+        const isInsideBoard = (p, boardConfig) => p.x >= 0 && p.y >= 0 && p.x <= boardConfig.width && p.y <= boardConfig.height;
+
+        // 配線が通る穴を始点から順に列挙する（両端は kind: 'end'、それ以外は 'mid'）
+        // dir はその穴での配線の向き（'H' / 'V'、曲がり角は 'HV'）
+        const getWireHoles = (wire) => {
+            const x1 = wire.startX, y1 = wire.startY, x2 = wire.endX, y2 = wire.endY;
+            const corner = wire.routeType === 'VH' ? { x: x1, y: y2 } : { x: x2, y: y1 };
+            const points = [{ x: x1, y: y1, dir: x1 === corner.x && y1 === corner.y ? (y1 === y2 ? 'H' : 'V') : (x1 === corner.x ? 'V' : 'H') }];
+            const walk = (from, to) => {
+                const dx = Math.sign(to.x - from.x);
+                const dy = Math.sign(to.y - from.y);
+                let x = from.x, y = from.y;
+                while (x !== to.x || y !== to.y) {
+                    x += dx; y += dy;
+                    points.push({ x, y, dir: dx !== 0 ? 'H' : 'V' });
+                }
+            };
+            walk({ x: x1, y: y1 }, corner);
+            const cornerIndex = points.length - 1;
+            walk(corner, { x: x2, y: y2 });
+            const isBent = x1 !== x2 && y1 !== y2;
+            return points.map((p, i) => ({
+                ...p,
+                dir: isBent && i === cornerIndex ? 'HV' : p.dir,
+                kind: i === 0 || i === points.length - 1 ? 'end' : 'mid'
+            }));
+        };
+
+        // 接続判定のルール:
+        //   はんだ付けされる点 = 配線の端点 と 接続点（ジャンクション）
+        //   はんだ付けされる穴では、ピン・その穴を端点とする配線（両面）・その穴を通過する裏面の配線がつながる
+        //   表面の配線の通過は、同じ穴に表面の端点がある（T字）か接続点がある場合のみつながる
+        //   はんだ付けされない穴での通過・交差はつながらない
+        const buildConnectionGraph = (components, wires, boardConfig, junctions = []) => {
             const nodes = [];
             const edges = [];
-            const nodeKeyToId = new Map();
-
             const addNode = (x, y, side, type, meta = {}) => {
-                const key = `${x},${y},${side}`;
-                if (nodeKeyToId.has(key)) return nodeKeyToId.get(key);
                 const id = `n${nodes.length}`;
                 nodes.push({ id, x, y, side, type, meta });
-                nodeKeyToId.set(key, id);
                 return id;
             };
 
-            const wireSegments = [];
-            const wireNodeIds = new Map();
+            const holes = new Map();
+            const getHole = (x, y) => {
+                const key = `${x},${y}`;
+                if (!holes.has(key)) holes.set(key, { pins: [], ends: [], mids: [], junction: null });
+                return holes.get(key);
+            };
 
             wires.forEach(wire => {
                 const side = wire.side || 'back';
-                const startNodeId = addNode(wire.startX, wire.startY, side, 'wire-end', { wireId: wire.id, end: 'start' });
-                const endNodeId = addNode(wire.endX, wire.endY, side, 'wire-end', { wireId: wire.id, end: 'end' });
-                wireNodeIds.set(wire.id, new Set([startNodeId, endNodeId]));
-
-                const routeType = wire.routeType || 'HV';
+                const startId = addNode(wire.startX, wire.startY, side, 'wire-end', { wireId: wire.id, end: 'start' });
+                const endId = addNode(wire.endX, wire.endY, side, 'wire-end', { wireId: wire.id, end: 'end' });
+                const pathIds = [startId];
                 if (wire.startX !== wire.endX && wire.startY !== wire.endY) {
-                    const cornerX = routeType === 'VH' ? wire.startX : wire.endX;
-                    const cornerY = routeType === 'VH' ? wire.endY : wire.startY;
-                    const cornerNodeId = addNode(cornerX, cornerY, side, 'wire-bend', { wireId: wire.id });
-                    wireNodeIds.get(wire.id).add(cornerNodeId);
+                    const cornerX = wire.routeType === 'VH' ? wire.startX : wire.endX;
+                    const cornerY = wire.routeType === 'VH' ? wire.endY : wire.startY;
+                    pathIds.push(addNode(cornerX, cornerY, side, 'wire-bend', { wireId: wire.id }));
+                }
+                pathIds.push(endId);
+                for (let i = 0; i < pathIds.length - 1; i++) {
+                    edges.push({ id: `e${edges.length}`, from: pathIds[i], to: pathIds[i + 1], wireId: wire.id, side });
                 }
 
-                wireSegments.push(...getWireSegments(wire));
+                getHole(wire.startX, wire.startY).ends.push({ nodeId: startId, side });
+                getHole(wire.endX, wire.endY).ends.push({ nodeId: endId, side });
+                getWireHoles(wire).filter(p => p.kind === 'mid').forEach(p => {
+                    getHole(p.x, p.y).mids.push({ nodeId: startId, side });
+                });
             });
 
-            for (let i = 0; i < wireSegments.length; i++) {
-                for (let j = i + 1; j < wireSegments.length; j++) {
-                    const a = wireSegments[i];
-                    const b = wireSegments[j];
-                    if (a.side !== b.side) continue;
-
-                    if (a.orientation !== b.orientation) {
-                        const h = a.orientation === 'H' ? a : b;
-                        const v = a.orientation === 'V' ? a : b;
-                        const withinX = v.x1 >= h.x1 && v.x1 <= h.x2;
-                        const withinY = h.y1 >= v.y1 && h.y1 <= v.y2;
-                        if (withinX && withinY) {
-                            const nodeId = addNode(v.x1, h.y1, a.side, 'junction', { wires: [a.wireId, b.wireId] });
-                            wireNodeIds.get(a.wireId)?.add(nodeId);
-                            wireNodeIds.get(b.wireId)?.add(nodeId);
-                        }
-                    } else if (a.orientation === 'H' && a.y1 === b.y1) {
-                        const overlapStart = Math.max(a.x1, b.x1);
-                        const overlapEnd = Math.min(a.x2, b.x2);
-                        if (overlapStart <= overlapEnd) {
-                            const startNodeId = addNode(overlapStart, a.y1, a.side, 'junction', { wires: [a.wireId, b.wireId] });
-                            const endNodeId = addNode(overlapEnd, a.y1, a.side, 'junction', { wires: [a.wireId, b.wireId] });
-                            wireNodeIds.get(a.wireId)?.add(startNodeId);
-                            wireNodeIds.get(a.wireId)?.add(endNodeId);
-                            wireNodeIds.get(b.wireId)?.add(startNodeId);
-                            wireNodeIds.get(b.wireId)?.add(endNodeId);
-                        }
-                    } else if (a.orientation === 'V' && a.x1 === b.x1) {
-                        const overlapStart = Math.max(a.y1, b.y1);
-                        const overlapEnd = Math.min(a.y2, b.y2);
-                        if (overlapStart <= overlapEnd) {
-                            const startNodeId = addNode(a.x1, overlapStart, a.side, 'junction', { wires: [a.wireId, b.wireId] });
-                            const endNodeId = addNode(a.x1, overlapEnd, a.side, 'junction', { wires: [a.wireId, b.wireId] });
-                            wireNodeIds.get(a.wireId)?.add(startNodeId);
-                            wireNodeIds.get(a.wireId)?.add(endNodeId);
-                            wireNodeIds.get(b.wireId)?.add(startNodeId);
-                            wireNodeIds.get(b.wireId)?.add(endNodeId);
-                        }
-                    }
-                }
-            }
-
-            const pinNodeIds = [];
             components.forEach(comp => {
-                const pins = getComponentPinCoords(comp, boardConfig.gridSize);
-                pins.forEach((pin, index) => {
+                getComponentPinCoords(comp, boardConfig.gridSize).forEach((pin, index) => {
                     const nodeId = addNode(pin.x, pin.y, 'both', 'pin', { componentId: comp.id, pinIndex: index });
-                    pinNodeIds.push(nodeId);
+                    getHole(pin.x, pin.y).pins.push(nodeId);
                 });
             });
 
-            wireSegments.forEach(segment => {
-                const nodesOnSegment = nodes.filter(node => {
-                    if (node.side !== segment.side && node.side !== 'both') return false;
-                    if (segment.orientation === 'H') {
-                        return node.y === segment.y1 && node.x >= segment.x1 && node.x <= segment.x2;
-                    }
-                    return node.x === segment.x1 && node.y >= segment.y1 && node.y <= segment.y2;
-                });
-
-                if (nodesOnSegment.length < 2) return;
-
-                const sorted = nodesOnSegment.sort((a, b) => {
-                    if (segment.orientation === 'H') return a.x - b.x;
-                    return a.y - b.y;
-                });
-
-                for (let i = 0; i < sorted.length - 1; i++) {
-                    const start = sorted[i];
-                    const end = sorted[i + 1];
-                    edges.push({ id: `e${edges.length}`, from: start.id, to: end.id, wireId: segment.wireId, side: segment.side, orientation: segment.orientation });
-                }
+            junctions.forEach(j => {
+                const nodeId = addNode(j.x, j.y, 'both', 'junction', { junctionId: j.id });
+                getHole(j.x, j.y).junction = nodeId;
             });
 
             const parent = new Map();
             const find = (id) => {
-                const root = parent.get(id) || id;
-                if (root !== id) {
-                    const resolved = find(root);
-                    parent.set(id, resolved);
-                    return resolved;
-                }
-                return root;
+                const root = parent.get(id);
+                if (root === id) return id;
+                const resolved = find(root);
+                parent.set(id, resolved);
+                return resolved;
             };
             const union = (a, b) => {
                 const rootA = find(a);
@@ -442,30 +431,22 @@
             nodes.forEach(node => parent.set(node.id, node.id));
             edges.forEach(edge => union(edge.from, edge.to));
 
-            // ピンノードと同じ座標のその他ノードを接続
-            pinNodeIds.forEach(pinId => {
-                const pinNode = nodes.find(n => n.id === pinId);
-                if (!pinNode) return;
-                nodes.forEach(node => {
-                    if (node.id === pinId) return;
-                    if (node.x === pinNode.x && node.y === pinNode.y) {
-                        union(pinId, node.id);
-                    }
+            // 接続点を打たなくても端点で自動的に接続される穴（表示用）
+            const autoConnectionPoints = [];
+            holes.forEach((hole, key) => {
+                if (!hole.junction && hole.ends.length === 0) return;
+                const members = [...hole.ends.map(e => e.nodeId), ...hole.pins];
+                if (hole.junction) members.push(hole.junction);
+                hole.mids.forEach(m => {
+                    if (hole.junction || m.side === 'back' || hole.ends.some(e => e.side === m.side)) members.push(m.nodeId);
                 });
-            });
+                members.slice(1).forEach(id => union(members[0], id));
 
-            // 同じ座標にいるすべてのノード（ピンがない場所での複数ワイヤー終端など）を接続
-            const coordMap = new Map();
-            nodes.forEach(node => {
-                const key = `${node.x},${node.y}`;
-                if (!coordMap.has(key)) coordMap.set(key, []);
-                coordMap.get(key).push(node.id);
-            });
-            coordMap.forEach(nodeIds => {
-                if (nodeIds.length > 1) {
-                    for (let i = 1; i < nodeIds.length; i++) {
-                        union(nodeIds[0], nodeIds[i]);
-                    }
+                // 端点があり、ピン・配線が2つ以上つながる穴
+                const conductorCount = members.length - (hole.junction ? 1 : 0);
+                if (!hole.junction && conductorCount >= 2) {
+                    const [x, y] = key.split(',').map(Number);
+                    autoConnectionPoints.push({ x, y });
                 }
             });
 
@@ -482,7 +463,36 @@
                 nodeIds
             }));
 
-            return { nodes, edges, nets };
+            return { nodes, edges, nets, autoConnectionPoints };
+        };
+
+        // 旧形式（接続点なし）のファイル用: 以前は裏面の配線がピン上を通過・交差するだけで接続していたため、
+        // その箇所に接続点を打って接続を保つ
+        const migrateLegacyJunctions = (components, wires, gridSize) => {
+            const pinKeys = new Set();
+            components.forEach(comp => getComponentPinCoords(comp, gridSize).forEach(p => pinKeys.add(`${p.x},${p.y}`)));
+            const endKeys = new Set();
+            wires.forEach(w => endKeys.add(`${w.startX},${w.startY}`).add(`${w.endX},${w.endY}`));
+            const backMids = new Map(); // 穴 -> その穴を通過する裏面配線の向きの一覧
+            wires.filter(w => (w.side || 'back') === 'back').forEach(w => {
+                getWireHoles(w).filter(p => p.kind === 'mid').forEach(p => {
+                    const key = `${p.x},${p.y}`;
+                    if (!backMids.has(key)) backMids.set(key, []);
+                    backMids.get(key).push(p.dir);
+                });
+            });
+            // 向きの異なる配線同士の交差（同一直線上の重なりは端点同士で接続されるので対象外）
+            const isCrossing = (dirs) => dirs.some((a, i) => dirs.some((b, j) => i !== j && (a.includes('H') && b.includes('V'))));
+            const junctions = [];
+            backMids.forEach((dirs, key) => {
+                // 端点がある穴は新ルールでも接続されるので不要
+                if (endKeys.has(key)) return;
+                if (pinKeys.has(key) || isCrossing(dirs)) {
+                    const [x, y] = key.split(',').map(Number);
+                    junctions.push({ id: Math.random().toString(36).substr(2, 9), x, y });
+                }
+            });
+            return junctions;
         };
 
         const NET_COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#06b6d4', '#84cc16', '#d946ef'];
@@ -508,9 +518,10 @@
                 }
             });
 
+            const netNodeIds = new Set(net.nodeIds);
             const wireIds = new Set();
-            wireNodes.forEach(wn => {
-                if (wn.meta?.wireId) wireIds.add(wn.meta.wireId);
+            (connectionGraph.edges || []).forEach(edge => {
+                if (netNodeIds.has(edge.from)) wireIds.add(edge.wireId);
             });
 
             return {
@@ -533,14 +544,18 @@
             const netToWires = new Map();
             if (!connectionGraph.nets) return netToWires;
 
+            // 同じ座標のノードは先に登録されたワイヤのmetaしか持たないため、エッジのwireIdで判定する
+            const nodeToNet = new Map();
+            connectionGraph.nets.forEach(net => net.nodeIds.forEach(nodeId => nodeToNet.set(nodeId, net.id)));
+            const netWireIds = new Map();
+            (connectionGraph.edges || []).forEach(edge => {
+                const netId = nodeToNet.get(edge.from);
+                if (!netWireIds.has(netId)) netWireIds.set(netId, new Set());
+                netWireIds.get(netId).add(edge.wireId);
+            });
+
             connectionGraph.nets.forEach((net, netIndex) => {
-                const wireIds = new Set();
-                net.nodeIds.forEach(nodeId => {
-                    const node = connectionGraph.nodes?.find(n => n.id === nodeId);
-                    if (node?.meta?.wireId) {
-                        wireIds.add(node.meta.wireId);
-                    }
-                });
+                const wireIds = netWireIds.get(net.id) || new Set();
                 netToWires.set(net.id, { wires: Array.from(wireIds), color: getNetColor(netIndex) });
             });
             return netToWires;
@@ -585,7 +600,7 @@
                 });
                 const hasWires = net.nodeIds.some(nodeId => {
                     const node = connectionGraph.nodes.find(n => n.id === nodeId);
-                    return node?.type === 'wire-end' || node?.type === 'junction' || node?.type === 'wire-bend';
+                    return node?.type === 'wire-end' || node?.type === 'wire-bend';
                 });
 
                 if (hasWires && !hasPins) {
@@ -606,25 +621,61 @@
                         message: `ネット${net.id.replace('net', '')}: 孤立したワイヤエンドポイント`
                     });
                 }
+
+                if (net.nodeIds.length === 1) {
+                    const node = connectionGraph.nodes.find(n => n.id === net.nodeIds[0]);
+                    if (node?.type === 'junction') {
+                        issues.push({
+                            type: 'unused-junction',
+                            severity: 'warning',
+                            netId: net.id,
+                            message: `接続点 (${node.x},${node.y}) に何もつながっていません`
+                        });
+                    }
+                }
             });
 
-            const connectedNets = connectionGraph.nets.filter(net =>
-                net.nodeIds.some(nodeId => {
-                    const node = connectionGraph.nodes.find(n => n.id === nodeId);
-                    return node?.type === 'pin';
-                })
-            ).length;
+            // 同じ面の他のワイヤに完全に重なっているワイヤ（削除しても接続は変わらない）
+            const isZeroLength = (w) => w.startX === w.endX && w.startY === w.endY;
+            const segmentsByWire = wires.map(w => isZeroLength(w) ? [] : getWireSegments(w));
+            const isCoveredBy = (segments, other) => segments.every(s => other.some(o =>
+                o.orientation === s.orientation &&
+                (s.orientation === 'H'
+                    ? o.y1 === s.y1 && o.x1 <= s.x1 && s.x2 <= o.x2
+                    : o.x1 === s.x1 && o.y1 <= s.y1 && s.y2 <= o.y2)
+            ));
+            wires.forEach((wire, i) => {
+                if (segmentsByWire[i].length === 0) return;
+                const side = wire.side || 'back';
+                const coveringIndex = wires.findIndex((other, j) => {
+                    if (j === i || segmentsByWire[j].length === 0 || (other.side || 'back') !== side) return false;
+                    if (!isCoveredBy(segmentsByWire[i], segmentsByWire[j])) return false;
+                    // 完全に同一のワイヤ同士は後ろの方だけを重複として報告する
+                    return !isCoveredBy(segmentsByWire[j], segmentsByWire[i]) || j < i;
+                });
+                if (coveringIndex !== -1) {
+                    issues.push({
+                        type: 'duplicate-wire',
+                        severity: 'warning',
+                        wireId: wire.id,
+                        message: `${side === 'front' ? '表面' : '裏面'}のワイヤ (${wire.startX},${wire.startY})→(${wire.endX},${wire.endY}) は他のワイヤと重複しています`
+                    });
+                }
+            });
+
+            const nodeToNet = new Map();
+            connectionGraph.nets.forEach(net => net.nodeIds.forEach(nodeId => nodeToNet.set(nodeId, net.id)));
+            const pinNets =new Set(connectionGraph.nodes.filter(n => n.type === 'pin').map(n => nodeToNet.get(n.id)));
 
             return {
                 issues,
                 stats: {
                     totalNets: connectionGraph.nets.length,
-                    connectedNets,
-                    disconnectedWires: wires.filter(w => {
-                        const nodes = connectionGraph.nodes.filter(n => n.meta?.wireId === w.id);
-                        const hasPin = nodes.some(n => n.type === 'pin');
-                        return nodes.length > 0 && !hasPin;
-                    }).length
+                    connectedNets: pinNets.size,
+                    // ワイヤの属するネット（エッジから判定）に部品ピンが1つもないものを数える
+                    disconnectedWires: wires.filter(w =>
+                        !connectionGraph.edges.some(e => e.wireId === w.id && pinNets.has(nodeToNet.get(e.from)))
+                    ).length
                 }
             };
         };
@@ -811,10 +862,12 @@
             boardConfig,
             components,
             wires,
+            junctions = [],
             viewSide,
             showLabels,
             wireColors,
             selectedItem, // optional
+            selectedTool, // optional
             hoveredGrid, // optional
             currentWireStart, // optional
             currentWireRouteType, // optional
@@ -825,6 +878,7 @@
             handleComponentDragStart, // optional
             handleWireEndpointDragStart, // optional
             handleWireClick, // optional
+            handleJunctionMouseDown, // optional
             handleDeviceDown, // optional
             isPrintMode = false,
             connectionGraph = { nodes: [], edges: [], nets: [] }, // optional
@@ -864,9 +918,9 @@
                     <g transform={viewSide === 'back' ? `scale(-1, 1) translate(-${totalBoardWidth}, 0)` : ''}>
                         <g>{renderGridHoles()}</g>
 
-                        {!isPrintMode && selectedItem?.tool === 'wire' && hoveredGrid && (
+                        {!isPrintMode && (selectedTool === 'wire' || selectedTool === 'junction') && hoveredGrid && (
                             <g className="pointer-events-none">
-                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill={wireColors[viewSide]} opacity={0.3} />
+                                <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={boardConfig.gridSize / 2.5} fill={selectedTool === 'junction' ? '#f8fafc' : wireColors[viewSide]} opacity={0.3} />
                                 <circle cx={hoveredGrid.x * boardConfig.gridSize} cy={hoveredGrid.y * boardConfig.gridSize} r={2} fill="white" />
                             </g>
                         )}
@@ -908,19 +962,22 @@
                                                 </g>
                                             );
                                         })}
-                                        {!isPrintMode && currentWireStart && hoveredGrid && (
+                                        {/* 始点はカーソルが基板外にあっても表示し続ける（見えないまま残るのを防ぐ） */}
+                                        {!isPrintMode && currentWireStart && (
                                             <g className="pointer-events-none">
-                                                <polyline
-                                                    points={calculateWirePoints(currentWireStart.x, currentWireStart.y, hoveredGrid.x, hoveredGrid.y, currentWireRouteType, boardConfig.gridSize)}
-                                                    stroke={wireColors[viewSide]}
-                                                    fill="none"
-                                                    strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)}
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    opacity={0.6}
-                                                    strokeDasharray="4,4"
-                                                />
-                                                <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={wireColors[viewSide]} />
+                                                {hoveredGrid && (
+                                                    <polyline
+                                                        points={calculateWirePoints(currentWireStart.x, currentWireStart.y, hoveredGrid.x, hoveredGrid.y, currentWireRouteType, boardConfig.gridSize)}
+                                                        stroke={wireColors[viewSide]}
+                                                        fill="none"
+                                                        strokeWidth={Math.max(2, boardConfig.gridSize * 0.15)}
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        opacity={0.6}
+                                                        strokeDasharray="4,4"
+                                                    />
+                                                )}
+                                                <circle cx={currentWireStart.x * boardConfig.gridSize} cy={currentWireStart.y * boardConfig.gridSize} r={4} fill={wireColors[viewSide]} stroke="white" strokeWidth={1} />
                                             </g>
                                         )}
                                     </g>
@@ -982,6 +1039,22 @@
                             </g>
                         )}
 
+                        {/* 接続点（はんだで配線同士・配線とピンをつなぐ点）。端点で自動接続される穴も同じ見た目で表示する */}
+                        <g className="junctions">
+                            {(connectionGraph.autoConnectionPoints || []).map(p => (
+                                <circle key={`auto-${p.x},${p.y}`} cx={p.x * boardConfig.gridSize} cy={p.y * boardConfig.gridSize} r={boardConfig.gridSize * 0.22} fill="#f8fafc" stroke="#111827" strokeWidth={1.5} style={{ pointerEvents: 'none' }} />
+                            ))}
+                            {junctions.map(j => {
+                                const isSelected = !isPrintMode && selectedItem?.type === 'junction' && selectedItem.id === j.id;
+                                return (
+                                    <g key={j.id} onMouseDown={(e) => { if (!isPrintMode && handleJunctionMouseDown) handleJunctionMouseDown(e, j.id); }} className={!isPrintMode && selectedTool === 'select' ? 'cursor-pointer' : ''} style={{ pointerEvents: isPrintMode ? 'none' : 'auto' }}>
+                                        <circle cx={j.x * boardConfig.gridSize} cy={j.y * boardConfig.gridSize} r={boardConfig.gridSize * 0.22} fill="#f8fafc" stroke="#111827" strokeWidth={1.5} />
+                                        {isSelected && <circle cx={j.x * boardConfig.gridSize} cy={j.y * boardConfig.gridSize} r={boardConfig.gridSize * 0.38} fill="none" stroke="#6366f1" strokeWidth={1.5} strokeDasharray="2,2" />}
+                                    </g>
+                                );
+                            })}
+                        </g>
+
                         {/* 最前面UI（ワイヤー端点ハンドル） */}
                         {!isPrintMode && (
                             <g className="ui-overlay">
@@ -1024,7 +1097,8 @@
         };
 
         // --- 印刷用レイアウトコンポーネント ---
-        const PrintLayout = ({ components, wires, boardConfig, showLabels, wireColors, projectTitle }) => {
+        const PrintLayout = ({ components, wires, junctions, boardConfig, showLabels, wireColors, projectTitle }) => {
+            const connectionGraph = buildConnectionGraph(components, wires, boardConfig, junctions);
             // BOM Summary Calculation
             const summary = components.reduce((acc, comp) => {
                 const typeDef = COMPONENT_DEFINITIONS[comp.type.toUpperCase()];
@@ -1050,6 +1124,8 @@
                                         boardConfig={boardConfig}
                                         components={components}
                                         wires={wires}
+                                        junctions={junctions}
+                                        connectionGraph={connectionGraph}
                                         viewSide="front"
                                         showLabels={showLabels}
                                         wireColors={wireColors}
@@ -1067,6 +1143,8 @@
                                         boardConfig={boardConfig}
                                         components={components}
                                         wires={wires}
+                                        junctions={junctions}
+                                        connectionGraph={connectionGraph}
                                         viewSide="back"
                                         showLabels={showLabels}
                                         wireColors={wireColors}
@@ -1125,7 +1203,8 @@
 
             const [components, setComponents] = useState([]);
             const [wires, setWires] = useState([]);
-            const [connectionGraph, setConnectionGraph] = useState({ nodes: [], edges: [], nets: [] });
+            const [junctions, setJunctions] = useState([]); // 接続点 [{ id, x, y }]
+            const [connectionGraph, setConnectionGraph] = useState({ nodes: [], edges: [], nets: [], autoConnectionPoints: [] });
             const [connectionValidation, setConnectionValidation] = useState({ issues: [], stats: { totalNets: 0, connectedNets: 0, disconnectedWires: 0 } });
             const [selectedTool, setSelectedTool] = useState('select');
 
@@ -1181,8 +1260,8 @@
             }, []);
 
             useEffect(() => {
-                setConnectionGraph(buildConnectionGraph(components, wires, boardConfig));
-            }, [components, wires, boardConfig]);
+                setConnectionGraph(buildConnectionGraph(components, wires, boardConfig, junctions));
+            }, [components, wires, boardConfig, junctions]);
 
             useEffect(() => {
                 setConnectionValidation(validateConnectionGraph(connectionGraph, wires));
@@ -1202,18 +1281,26 @@
             // 現在の配線色を取得
             const currentWireColor = wireColors[viewSide];
 
-            // 初期位置を中央に調整する関数
-            const centerBoard = useCallback(() => {
+            // 基板全体が収まる倍率（最大1.5倍）にして中央に配置する関数
+            const centerBoard = useCallback((config = { width: DEFAULT_BOARD_WIDTH, height: DEFAULT_BOARD_HEIGHT, gridSize: DEFAULT_GRID_SIZE }) => {
                 if (containerRef.current) {
                     const containerWidth = containerRef.current.clientWidth;
                     const containerHeight = containerRef.current.clientHeight;
-                    // デフォルト設定で計算
-                    const boardWidth = DEFAULT_BOARD_WIDTH * DEFAULT_GRID_SIZE + DEFAULT_GRID_SIZE;
-                    const boardHeight = DEFAULT_BOARD_HEIGHT * DEFAULT_GRID_SIZE + DEFAULT_GRID_SIZE;
+                    const boardWidth = config.width * config.gridSize + config.gridSize;
+                    const boardHeight = config.height * config.gridSize + config.gridSize;
+                    // 上部のツールバーに隠れないよう上側は広めに余白を取る
+                    const margin = 24;
+                    const topReserve = 72;
+                    const fitScale = Math.min(
+                        (containerWidth - margin * 2) / boardWidth,
+                        (containerHeight - topReserve - margin) / boardHeight
+                    );
+                    const newScale = Math.min(1.5, Math.max(0.5, fitScale));
 
+                    setScale(newScale);
                     setOffset({
-                        x: (containerWidth - boardWidth * 1.5) / 2, // 初期スケール1.5を考慮
-                        y: (containerHeight - boardHeight * 1.5) / 2
+                        x: (containerWidth - boardWidth * newScale) / 2,
+                        y: Math.max(topReserve, topReserve + (containerHeight - topReserve - margin - boardHeight * newScale) / 2)
                     });
                 }
             }, []);
@@ -1326,11 +1413,13 @@
 
             const generateId = () => Math.random().toString(36).substr(2, 9);
 
+            const isComponentTool = (tool) => Object.values(COMPONENT_DEFINITIONS).some(def => def.id === tool);
+
             const selectTool = (toolId) => {
                 setSelectedTool(toolId);
                 setSelectedItem(null);
                 setCurrentWireStart(null);
-                if (toolId !== 'select' && toolId !== 'wire') {
+                if (isComponentTool(toolId)) {
                     if (componentSizes[toolId]) {
                         setActiveSize(componentSizes[toolId]);
                     } else {
@@ -1344,7 +1433,7 @@
                 const newVal = Math.max(1, Number(value));
                 const newSize = { ...activeSize, [key]: newVal };
                 setActiveSize(newSize);
-                if (selectedTool !== 'select' && selectedTool !== 'wire') {
+                if (isComponentTool(selectedTool)) {
                     setComponentSizes(prev => ({ ...prev, [selectedTool]: newSize }));
                 }
             };
@@ -1375,10 +1464,30 @@
                 }));
             };
 
+            // 基板サイズ入力の確定時に、配置済みの部品・配線がはみ出さない大きさに補正する
+            const clampBoardSize = (key) => {
+                const bounds = getContentBounds(components, wires, boardConfig.gridSize, junctions);
+                const contentMax = bounds ? (key === 'width' ? bounds.maxX : bounds.maxY) : 0;
+                const requested = Number(boardConfig[key]) || 0;
+                const value = Math.min(100, Math.max(5, contentMax, requested));
+                if (value !== boardConfig[key]) {
+                    setBoardConfig(prev => ({ ...prev, [key]: value }));
+                    if (contentMax > requested) openAlert('配置済みの部品・配線が収まるサイズに調整しました。');
+                }
+            };
+
+            // 部品のピンがすべて基板内に収まるか
+            const fitsOnBoard = (comp) => getComponentPinCoords(comp, boardConfig.gridSize).every(p => isInsideBoard(p, boardConfig));
+
             // 配置済み部品のサイズ変更
             const handleComponentSizeChange = (key, value) => {
                 if (!selectedItem || selectedItem.type !== 'component') return;
                 const newVal = Math.max(1, Number(value));
+                const target = components.find(c => c.id === selectedItem.id);
+                if (target && !fitsOnBoard({ ...target, [key]: newVal })) {
+                    openAlert('このサイズでは基板からはみ出します。');
+                    return;
+                }
                 setComponents(prev => prev.map(c => {
                     if (c.id !== selectedItem.id) return c;
                     const newWidth = key === 'width' ? newVal : c.width;
@@ -1421,6 +1530,8 @@
                         // 始点がない場合 -> 始点をセット
                         setCurrentWireStart({ x, y });
                     }
+                } else if (selectedTool === 'junction') {
+                    toggleJunction(x, y);
                 } else if (selectedTool === 'select') {
                     if (e.target.tagName === 'svg' || e.target.id === 'board-bg') {
                         setSelectedItem(null);
@@ -1445,9 +1556,17 @@
                 hasPanned.current = false;
             };
 
+            // windowリスナーから常に最新の状態を参照するためのハンドラ参照
+            const handlersRef = useRef({});
+
             useEffect(() => {
                 const handleWindowMouseMove = (e) => {
                     const pos = getClientPos(e);
+                    // タッチでの部品・ワイヤー端点ドラッグ
+                    if (e.type === 'touchmove' && touchState.current.mode === 'drag') {
+                        handlersRef.current.handleMouseMove(e);
+                        return;
+                    }
                     // パンニング処理（オフセット更新）
                     if (isRightDragging.current || (touchState.current.mode === 'pan' && e.type === 'touchmove')) {
                         if (e.type === 'touchmove') {
@@ -1488,10 +1607,13 @@
                                     button: 0,
                                     target: e.target // 必要であれば
                                 };
-                                handleMouseDown(syntheticEvent);
+                                handlersRef.current.handleMouseDown(syntheticEvent);
                             }
-                            touchState.current.mode = 'tap';
+                            isRightDragging.current = false;
+                        } else if (touchState.current.mode === 'drag') {
+                            handlersRef.current.handleMouseUp(e);
                         }
+                        touchState.current.mode = 'tap';
                         return;
                     }
 
@@ -1500,14 +1622,18 @@
                         isRightDragging.current = false;
                         if (!hasPanned.current) {
                             // パンニングされなかった場合のみキャンセル処理
+                            const { currentWireStart, draggedComponent, draggedWireEndpoint } = handlersRef.current;
                             if (currentWireStart || draggedComponent || draggedWireEndpoint) {
                                 setCurrentWireStart(null);
                                 setDraggedComponent(null);
                                 setDraggedWireEndpoint(null);
                             } else {
-                                selectTool('select');
+                                handlersRef.current.selectTool('select');
                             }
                         }
+                    } else if (e.button === 0) {
+                        // 基板外でボタンを離した場合もドラッグを終了する
+                        handlersRef.current.handleMouseUp(e);
                     }
                 };
 
@@ -1524,7 +1650,7 @@
                     window.removeEventListener('touchend', handleWindowMouseUp);
                     window.removeEventListener('touchcancel', handleWindowMouseUp);
                 };
-            }, [currentWireStart, draggedComponent, draggedWireEndpoint]);
+            }, []);
 
             const handleMouseMove = (e) => {
                 const pos = getClientPos(e);
@@ -1534,6 +1660,7 @@
                 }
 
                 if (draggedWireEndpoint) {
+                    if (!isInsideBoard({ x, y }, boardConfig)) return;
                     setWires(prev => prev.map(w => {
                         const targets = draggedWireEndpoint.filter(target => target.id === w.id);
                         if (targets.length === 0) return w;
@@ -1556,7 +1683,11 @@
                     // グリッド座標で直接漂動
                     const newGridX = x - draggedComponent.offsetX;
                     const newGridY = y - draggedComponent.offsetY;
-                    
+
+                    // ピンが基板外に出る位置へは動かさない
+                    const comp = components.find(c => c.id === draggedComponent.id);
+                    if (comp && !getComponentPinCoords({ ...comp, gridX: newGridX, gridY: newGridY }, boardConfig.gridSize).every(p => isInsideBoard(p, boardConfig))) return;
+
                     setComponents(prev => prev.map(comp => {
                         if (comp.id === draggedComponent.id) return { ...comp, gridX: newGridX, gridY: newGridY };
                         return comp;
@@ -1584,10 +1715,11 @@
 
             const handleMouseUp = (e) => {
                 // 配線作成処理は MouseDown に移動したため削除
-                if (draggedComponent) {
+                if (draggedComponent || draggedWireEndpoint) {
+                    // 始点と終点が重なった長さ0の配線は見えないまま残るので削除する
+                    setWires(prev => prev.filter(w => w.startX !== w.endX || w.startY !== w.endY));
+                    commitEdit('drag');
                     setDraggedComponent(null);
-                }
-                if (draggedWireEndpoint) {
                     setDraggedWireEndpoint(null);
                 }
             };
@@ -1615,10 +1747,16 @@
             }, []);
 
             const addComponent = (typeDef, gridX, gridY) => {
+                if (!fitsOnBoard({ type: typeDef.id, gridX, gridY, width: typeDef.width, height: typeDef.height, rotation: 0 })) return;
                 saveHistory(); // 履歴保存
                 const prefix = COMPONENT_PREFIXES[typeDef.id] || 'P';
-                const count = components.filter(c => c.type === typeDef.id).length + 1;
-                const name = `${prefix}${count}`;
+                // 既存の連番の最大値+1（削除後の重複を防ぐ）
+                const namePattern = new RegExp(`^${prefix}(\\d+)$`);
+                const maxNumber = components.reduce((max, c) => {
+                    const match = (c.name || '').match(namePattern);
+                    return match ? Math.max(max, Number(match[1])) : max;
+                }, 0);
+                const name = `${prefix}${maxNumber + 1}`;
                 // グリッド座標で直接保存
                 const newComp = {
                     id: generateId(), type: typeDef.id, gridX, gridY,
@@ -1668,8 +1806,10 @@
                         type: c.type,
                         name: c.name,
                         value: c.value,
-                        x: Math.round(c.x / boardConfig.gridSize),
-                        y: Math.round(c.y / boardConfig.gridSize),
+                        x: c.gridX || 0,
+                        y: c.gridY || 0,
+                        width: c.width,
+                        height: c.height,
                         rotation: c.rotation
                     })),
                     wires: wires.map(w => ({
@@ -1747,44 +1887,67 @@ ${JSON.stringify(circuitData, null, 2)}`;
             // Undo History
             const [history, setHistory] = useState([]);
 
-            const saveHistory = () => {
+            const pushHistory = (snapshot) => {
                 setHistory(prev => {
-                    const newHistory = [...prev, { components, wires }];
+                    const newHistory = [...prev, snapshot];
                     if (newHistory.length > 50) newHistory.shift(); // 履歴数制限
                     return newHistory;
                 });
             };
 
+            const saveHistory = () => pushHistory({ components, wires, junctions });
+
+            // ドラッグや入力欄の編集など、連続する変更を1つの履歴にまとめる
+            // （入力欄のblurはドラッグ開始より後に発火するため、'input' と 'drag' で別々に保持する）
+            const editSnapshots = useRef({});
+            const beginEdit = (key) => {
+                editSnapshots.current[key] = { components, wires, junctions };
+            };
+            const commitEdit = (key) => {
+                const snapshot = editSnapshots.current[key];
+                delete editSnapshots.current[key];
+                if (snapshot && JSON.stringify(snapshot) !== JSON.stringify({ components, wires, junctions })) {
+                    pushHistory(snapshot);
+                }
+            };
+            const beginInputEdit = () => beginEdit('input');
+            const commitInputEdit = () => commitEdit('input');
+
+            // 選択変更で入力欄がblurなしに消えた場合も編集内容を履歴に残す
+            useEffect(() => {
+                commitInputEdit();
+            }, [selectedItem?.id]);
+
             const undo = useCallback(() => {
-                setHistory(prev => {
-                    if (prev.length === 0) return prev;
-                    const newHistory = [...prev];
-                    const lastState = newHistory.pop();
-                    setComponents(lastState.components);
-                    setWires(lastState.wires);
-                    setSuggestedCircuit(null); // AI提案状態もリセット
-                    return newHistory;
-                });
-            }, []);
+                if (history.length === 0) return;
+                const lastState = history[history.length - 1];
+                setHistory(history.slice(0, -1));
+                setComponents(lastState.components);
+                setWires(lastState.wires);
+                setJunctions(lastState.junctions || []);
+                setSuggestedCircuit(null); // AI提案状態もリセット
+            }, [history]);
 
             const applyAiSuggestion = () => {
                 if (!suggestedCircuit) return;
-                openConfirm('現在の設計をAIの提案内容で上書きしますか？\n（元に戻すことはできません）', () => {
+                openConfirm('現在の設計をAIの提案内容で上書きしますか？\n（「元に戻す」で適用前に戻せます）', () => {
                     saveHistory(); // 履歴保存
-                    // Componentsの復元（ピクセル座標への変換と不足プロパティの補完）
+                    // Componentsの復元（グリッド座標への変換と不足プロパティの補完）
                     const newComponents = suggestedCircuit.components.map(c => {
                         const def = Object.values(COMPONENT_DEFINITIONS).find(def => def.id === c.type) || COMPONENT_DEFINITIONS.GENERAL;
+                        const width = Math.max(1, Number(c.width) || def.defaultWidth);
+                        const height = Math.max(1, Number(c.height) || def.defaultHeight);
                         return {
                             id: generateId(), // IDは新規生成（またはAIが保持していればそれを使うが、突合が難しいので新規が無難）
-                            type: c.type,
+                            type: def.id,
                             name: c.name,
                             value: c.value,
-                            x: c.x * boardConfig.gridSize,
-                            y: c.y * boardConfig.gridSize,
+                            gridX: Math.round(Number(c.x) || 0),
+                            gridY: Math.round(Number(c.y) || 0),
                             rotation: c.rotation || 0,
-                            width: def.defaultWidth, // デフォルトサイズに戻る制限あり
-                            height: def.defaultHeight,
-                            ...(c.type === 'jumper' ? { pinLabels: normalizePinLabels([], def.defaultWidth, def.defaultHeight) } : {})
+                            width,
+                            height,
+                            ...(def.id === 'jumper' ? { pinLabels: normalizePinLabels(c.pinLabels, width, height) } : {})
                         };
                     });
 
@@ -1802,6 +1965,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
 
                     setComponents(newComponents);
                     setWires(newWires);
+                    setJunctions(migrateLegacyJunctions(newComponents, newWires, boardConfig.gridSize));
                     setSuggestedCircuit(null);
                     setIsAiResultOpen(false);
                     openAlert('AIの提案を適用しました。');
@@ -1815,12 +1979,35 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     setComponents(components.filter(c => c.id !== selectedItem.id));
                 } else if (selectedItem.type === 'wire') {
                     setWires(wires.filter(w => w.id !== selectedItem.id));
+                } else if (selectedItem.type === 'junction') {
+                    setJunctions(junctions.filter(j => j.id !== selectedItem.id));
                 }
                 setSelectedItem(null);
-            }, [selectedItem, components, wires]);
+            }, [selectedItem, components, wires, junctions]);
+
+            // 接続点の追加・削除（同じ穴にあれば削除）
+            const toggleJunction = (x, y) => {
+                const existing = junctions.find(j => j.x === x && j.y === y);
+                if (!existing && connectionGraph.autoConnectionPoints.some(p => p.x === x && p.y === y)) {
+                    openAlert('この穴は配線の端点で自動的に接続されているため、接続点は不要です。');
+                    return;
+                }
+                saveHistory(); // 履歴保存
+                if (existing) {
+                    setJunctions(junctions.filter(j => j.id !== existing.id));
+                } else {
+                    setJunctions([...junctions, { id: generateId(), x, y }]);
+                }
+            };
 
             const rotateSelected = useCallback(() => {
                 if (selectedItem?.type !== 'component') return;
+                const target = components.find(c => c.id === selectedItem.id);
+                if (!target) return;
+                if (!fitsOnBoard({ ...target, rotation: (target.rotation + 90) % 360 })) {
+                    openAlert('回転すると基板からはみ出します。');
+                    return;
+                }
                 saveHistory(); // 履歴保存
                 setComponents(components.map(c => {
                     if (c.id === selectedItem.id) {
@@ -1828,7 +2015,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     }
                     return c;
                 }));
-            }, [selectedItem, components]);
+            }, [selectedItem, components, wires, boardConfig]);
 
             // スペースキーでのルート切り替え処理
             const toggleRouteType = useCallback(() => {
@@ -1838,6 +2025,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                 }
                 // 配線選択中ならその配線のルートタイプを切り替え
                 else if (selectedItem?.type === 'wire') {
+                    saveHistory(); // 履歴保存
                     setWires(prev => prev.map(w => {
                         if (w.id === selectedItem.id) {
                             const newType = (w.routeType || 'HV') === 'HV' ? 'VH' : 'HV';
@@ -1846,7 +2034,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                         return w;
                     }));
                 }
-            }, [currentWireStart, selectedItem]);
+            }, [currentWireStart, selectedItem, components, wires]);
 
             useEffect(() => {
                 const handleKeyDown = (e) => {
@@ -1878,7 +2066,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
-                    saveHistory(); // 履歴保存
+                    beginEdit('drag'); // ドラッグ終了時に変化があれば履歴保存
                     const pos = getClientPos(e);
                     const { x, y } = getGridCoords(pos.x, pos.y);
                     const comp = components.find(c => c.id === id);
@@ -1925,13 +2113,16 @@ ${JSON.stringify(circuitData, null, 2)}`;
                 e.stopPropagation();
                 if (e.button === 2) return;
                 if (selectedTool === 'select') {
-                    saveHistory(); // 履歴保存
+                    beginEdit('drag'); // ドラッグ終了時に変化があれば履歴保存
                     const targetWire = wires.find(w => w.id === id);
                     if (!targetWire) return;
                     const targetX = type === 'start' ? targetWire.startX : targetWire.endX;
                     const targetY = type === 'start' ? targetWire.startY : targetWire.endY;
+                    // 同じ穴を共有する端点のうち、今見ている面の配線だけをまとめて動かす
+                    const targetSide = targetWire.side || 'back';
                     const group = [];
                     wires.forEach(w => {
+                        if ((w.side || 'back') !== targetSide) return;
                         if (w.startX === targetX && w.startY === targetY) group.push({ id: w.id, type: 'start' });
                         if (w.endX === targetX && w.endY === targetY) group.push({ id: w.id, type: 'end' });
                     });
@@ -1952,6 +2143,15 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     default: return;
                 }
 
+                // 基板からはみ出す移動は行わない（はみ出した要素は見えないまま残ってしまうため）
+                const bounds = getContentBounds(components, wires, boardConfig.gridSize, junctions);
+                if (!bounds) return;
+                if (!isInsideBoard({ x: bounds.minX + dx, y: bounds.minY + dy }, boardConfig) || !isInsideBoard({ x: bounds.maxX + dx, y: bounds.maxY + dy }, boardConfig)) {
+                    openAlert('これ以上移動すると基板からはみ出します。');
+                    return;
+                }
+
+                saveHistory(); // 履歴保存
                 setComponents(prev => prev.map(c => ({
                     ...c,
                     gridX: c.gridX + dx,
@@ -1965,6 +2165,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     endX: w.endX + dx,
                     endY: w.endY + dy
                 })));
+
+                setJunctions(prev => prev.map(j => ({ ...j, x: j.x + dx, y: j.y + dy })));
             };
 
             // モーダル表示ヘルパー
@@ -1988,15 +2190,14 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     setTimeout(() => {
                         setComponents([]);
                         setWires([]);
+                        setJunctions([]);
                         setBoardConfig({
                             width: DEFAULT_BOARD_WIDTH,
-                            height: DEFAULT_BOARD_HEIGHT,
                             height: DEFAULT_BOARD_HEIGHT,
                             pitch: DEFAULT_PITCH,
                             gridSize: DEFAULT_GRID_SIZE
                         });
                         setProjectTitle('Untitled Project');
-                        setScale(1.5);
                         setViewSide('front');
                         centerBoard();
                         setSelectedTool('select');
@@ -2016,7 +2217,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
             };
 
             const saveDesign = () => {
-                const data = JSON.stringify({ components, wires, connectionGraph, boardConfig, componentSizes, showLabels, wireColors, projectTitle });
+                // connectionGraph は読み込み時に部品・配線から再計算するため保存しない
+                const data = JSON.stringify({ components, wires, junctions, boardConfig, componentSizes, showLabels, wireColors, projectTitle });
                 const blob = new Blob([data], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -2034,9 +2236,9 @@ ${JSON.stringify(circuitData, null, 2)}`;
                         const data = JSON.parse(ev.target.result);
                         
                         // まずboardConfigを確保
-                        let loadedConfig = { ...DEFAULT_BOARD_WIDTH, ...DEFAULT_BOARD_HEIGHT, ...DEFAULT_PITCH, gridSize: DEFAULT_GRID_SIZE };
+                        let loadedConfig = { width: DEFAULT_BOARD_WIDTH, height: DEFAULT_BOARD_HEIGHT, pitch: DEFAULT_PITCH, gridSize: DEFAULT_GRID_SIZE };
                         if (data.boardConfig) {
-                            loadedConfig = { ...data.boardConfig };
+                            loadedConfig = { width: DEFAULT_BOARD_WIDTH, height: DEFAULT_BOARD_HEIGHT, ...data.boardConfig };
                             if (!loadedConfig.pitch && loadedConfig.gridSize) {
                                 loadedConfig.pitch = Math.round((loadedConfig.gridSize / PIXELS_PER_MM) * 100) / 100;
                             }
@@ -2080,12 +2282,30 @@ ${JSON.stringify(circuitData, null, 2)}`;
                         
                         // 状態を更新
                         setBoardConfig(loadedConfig);
+                        centerBoard(loadedConfig);
                         setComponents(loadedComponents);
-                        setWires(data.wires || []);
-                        if (data.connectionGraph) setConnectionGraph(data.connectionGraph);
+                        // 始点と終点が同じ長さ0の配線は見えないゴミなので取り除く
+                        const allWires = data.wires || [];
+                        const loadedWires = allWires.filter(w => w.startX !== w.endX || w.startY !== w.endY);
+                        setWires(loadedWires);
+
+                        // junctions を持たない旧形式は、以前の「通過で接続」を保つよう接続点を補う
+                        const loadedJunctions = Array.isArray(data.junctions)
+                            ? data.junctions
+                            : migrateLegacyJunctions(loadedComponents, loadedWires, loadedConfig.gridSize);
+                        setJunctions(loadedJunctions);
+
+                        const notices = [];
+                        if (loadedWires.length < allWires.length) {
+                            notices.push(`長さ0の配線を${allWires.length - loadedWires.length}本削除しました。`);
+                        }
+                        if (!Array.isArray(data.junctions) && loadedJunctions.length > 0) {
+                            notices.push(`旧形式のファイルのため、裏面の配線がピンを通過・交差している${loadedJunctions.length}か所に接続点を追加しました。`);
+                        }
+                        if (notices.length > 0) openAlert(notices.join('\n'));
                         if (data.componentSizes) {
                             setComponentSizes(data.componentSizes);
-                            if (selectedTool !== 'select' && selectedTool !== 'wire' && data.componentSizes[selectedTool]) {
+                            if (isComponentTool(selectedTool) && data.componentSizes[selectedTool]) {
                                 setActiveSize(data.componentSizes[selectedTool]);
                             }
                         }
@@ -2120,6 +2340,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                 : null;
             const totalBoardWidth = boardConfig.width * boardConfig.gridSize + boardConfig.gridSize;
 
+            handlersRef.current = { handleMouseDown, handleMouseMove, handleMouseUp, selectTool, currentWireStart, draggedComponent, draggedWireEndpoint };
+
             return (
                 <div className="flex h-screen bg-gray-100 font-sans text-gray-800 overflow-hidden">
                     {/* 左サイドバー */}
@@ -2144,8 +2366,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                     <Icon d={Icons.Settings} size={12} /> 基板設定
                                 </h3>
                                 <div className="grid grid-cols-2 gap-2 text-xs">
-                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">横穴数</span><input type="number" value={boardConfig.width} onChange={(e) => setBoardConfig({ ...boardConfig, width: Number(e.target.value) })} className="p-1 border rounded" min="5" max="100" /></label>
-                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">縦穴数</span><input type="number" value={boardConfig.height} onChange={(e) => setBoardConfig({ ...boardConfig, height: Number(e.target.value) })} className="p-1 border rounded" min="5" max="100" /></label>
+                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">横穴数</span><input type="number" value={boardConfig.width} onChange={(e) => setBoardConfig({ ...boardConfig, width: Number(e.target.value) })} onBlur={() => clampBoardSize('width')} className="p-1 border rounded" min="5" max="100" /></label>
+                                    <label className="flex flex-col"><span className="mb-1 text-gray-600">縦穴数</span><input type="number" value={boardConfig.height} onChange={(e) => setBoardConfig({ ...boardConfig, height: Number(e.target.value) })} onBlur={() => clampBoardSize('height')} className="p-1 border rounded" min="5" max="100" /></label>
                                     <label className="flex flex-col col-span-2"><span className="mb-1 text-gray-600">ピッチ (mm)</span><input type="number" value={boardConfig.pitch} onChange={(e) => { const p = Math.max(0.1, Number(e.target.value)); setBoardConfig({ ...boardConfig, pitch: p, gridSize: p * PIXELS_PER_MM }); }} className="p-1 border rounded" step="0.01" min="0.1" max="10" /></label>
                                 </div>
                             </div>
@@ -2237,6 +2459,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                 <div className="grid grid-cols-2 gap-2">
                                     <button onClick={() => selectTool('select')} className={`flex items-center gap-2 p-2 rounded text-sm ${selectedTool === 'select' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-100'}`}><Icon d={Icons.MousePointer2} size={16} /> 選択・移動</button>
                                     <button onClick={() => selectTool('wire')} className={`flex items-center gap-2 p-2 rounded text-sm ${selectedTool === 'wire' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-100'}`}><Icon d={Icons.Activity} size={16} /> 配線モード</button>
+                                    <button onClick={() => selectTool('junction')} className={`flex items-center gap-2 p-2 rounded text-sm ${selectedTool === 'junction' ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'hover:bg-gray-100'}`} title="クリックした穴に接続点を打つ（もう一度クリックで削除）"><Icon d={Icons.Junction} size={16} /> 接続点</button>
                                 </div>
                             </div>
                             {/* 選択部品属性 */}
@@ -2244,8 +2467,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                 <div className="bg-indigo-50 p-3 rounded border border-indigo-200 mb-2 animate-fade-in border-l-4 border-l-indigo-500">
                                     <h3 className="text-xs font-semibold text-indigo-700 uppercase tracking-wider mb-2 flex justify-between"><span>選択部品: {COMPONENT_DEFINITIONS[currentSelectedComponent.type.toUpperCase()]?.name}</span></h3>
                                     <div className="space-y-2 text-xs">
-                                        <label className="block"><span className="text-gray-600 block mb-1">部品名 (例: R1)</span><input type="text" value={currentSelectedComponent.name || ''} onChange={e => handleAttributeChange('name', e.target.value)} className="w-full p-1 border rounded" /></label>
-                                        <label className="block"><span className="text-gray-600 block mb-1">説明 (例: 10kΩ)</span><input type="text" value={currentSelectedComponent.value || ''} onChange={e => handleAttributeChange('value', e.target.value)} className="w-full p-1 border rounded" /></label>
+                                        <label className="block"><span className="text-gray-600 block mb-1">部品名 (例: R1)</span><input type="text" value={currentSelectedComponent.name || ''} onFocus={beginInputEdit} onBlur={commitInputEdit} onChange={e => handleAttributeChange('name', e.target.value)} className="w-full p-1 border rounded" /></label>
+                                        <label className="block"><span className="text-gray-600 block mb-1">説明 (例: 10kΩ)</span><input type="text" value={currentSelectedComponent.value || ''} onFocus={beginInputEdit} onBlur={commitInputEdit} onChange={e => handleAttributeChange('value', e.target.value)} className="w-full p-1 border rounded" /></label>
 
                                         {/* コンデンサ専用属性 */}
                                         {currentSelectedComponent.type === 'capacitor' && (
@@ -2254,7 +2477,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                     <input
                                                         type="checkbox"
                                                         checked={currentSelectedComponent.isPolarized || false}
-                                                        onChange={e => handleAttributeChange('isPolarized', e.target.checked)}
+                                                        onChange={e => { saveHistory(); handleAttributeChange('isPolarized', e.target.checked); }}
                                                         className="rounded text-indigo-600 focus:ring-indigo-500"
                                                     />
                                                     <span className="text-gray-700 font-medium">極性あり (+)</span>
@@ -2271,6 +2494,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                             key={index}
                                                             type="text"
                                                             value={currentPinLabels?.[index] || ''}
+                                                            onFocus={beginInputEdit}
+                                                            onBlur={commitInputEdit}
                                                             onChange={e => updatePinLabel(index, e.target.value)}
                                                             maxLength={1}
                                                             className="w-full p-1 border rounded text-center"
@@ -2289,6 +2514,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                     min="1"
                                                     max="40"
                                                     value={currentSelectedComponent.width}
+                                                    onFocus={beginInputEdit}
+                                                    onBlur={commitInputEdit}
                                                     onChange={e => handleComponentSizeChange('width', e.target.value)}
                                                     className="w-full p-1 border rounded"
                                                 />
@@ -2300,6 +2527,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                                     min="1"
                                                     max="40"
                                                     value={currentSelectedComponent.height}
+                                                    onFocus={beginInputEdit}
+                                                    onBlur={commitInputEdit}
                                                     onChange={e => handleComponentSizeChange('height', e.target.value)}
                                                     className="w-full p-1 border rounded"
                                                 />
@@ -2309,7 +2538,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                 </div>
                             )}
                             {/* 部品サイズ */}
-                            {selectedTool !== 'select' && selectedTool !== 'wire' && (
+                            {isComponentTool(selectedTool) && (
                                 <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mb-2 animate-fade-in">
                                     <h3 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2 flex justify-between"><span>初期サイズ設定</span><span className="text-yellow-600 normal-case font-normal text-[10px]">{COMPONENT_DEFINITIONS[selectedTool.toUpperCase()]?.name}</span></h3>
                                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2355,7 +2584,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                     ))}
                                 </div>
                             </div>
-                            <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Space:</strong> 配線ルート切替</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p></div>
+                            <div className="p-3 bg-blue-50 rounded text-xs text-blue-700 space-y-1"><p><strong>Rキー:</strong> 選択部品を回転</p><p><strong>Space:</strong> 配線ルート切替</p><p><strong>Delete:</strong> 選択項目を削除</p><p><strong>Esc / 右クリック:</strong> キャンセル</p><p><strong>白い点:</strong> 接続されている穴。配線の途中でピンや他の配線とつなぐ所は「接続点」ツールで打つ（端点は自動で接続）</p></div>
                         </div>
                         <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-2">
                             <button onClick={undo} className="flex-1 flex items-center justify-center gap-1 bg-white border border-gray-300 p-2 rounded hover:bg-gray-100 text-sm" title="元に戻す (Ctrl+Z)"><Icon d={Icons.RotateCcw} size={16} /> 元に戻す</button>
@@ -2369,8 +2598,9 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     </div>
 
                     {/* メインエリア */}
-                    <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden no-print">
-                        <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none z-10">
+                    {/* 右クリック（パン・キャンセル）はフローティングパネル上でも効くようにメインエリア全体で受ける */}
+                    <div className="flex-1 flex flex-col relative bg-gray-200 overflow-hidden no-print" onMouseDown={(e) => { if (e.button === 2) handlePanMouseDown(e); }} onContextMenu={handleRightClick}>
+                        <div className="absolute top-4 left-4 right-4 flex flex-wrap items-start justify-between gap-2 pointer-events-none z-10">
                             <div className="bg-white/90 backdrop-blur shadow rounded-lg p-1 flex gap-1 pointer-events-auto">
                                 <button onClick={() => setScale(s => Math.max(0.5, s - 0.1))} className="p-2 hover:bg-gray-100 rounded"><Icon d={Icons.Minus} size={16} /></button>
                                 <span className="p-2 text-sm font-mono min-w-[3rem] text-center">{Math.round(scale * 100)}%</span>
@@ -2467,7 +2697,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                         </div>
 
                         {/* 修正箇所：flex中央揃えを削除し、相対配置に変更 */}
-                        <div ref={containerRef} className="flex-1 overflow-hidden p-0 cursor-crosshair bg-gray-200 relative" onMouseDown={(e) => { if (e.button === 2) { handlePanMouseDown(e); return; } if (e.target === e.currentTarget) setSelectedItem(null); }} onContextMenu={handleRightClick}>
+                        <div ref={containerRef} className="flex-1 overflow-hidden p-0 cursor-crosshair bg-gray-200 relative" onMouseDown={(e) => { if (e.button !== 2 && e.target === e.currentTarget) setSelectedItem(null); }}>
                             <div style={{
                                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                                 transformOrigin: '0 0',
@@ -2478,10 +2708,12 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                         boardConfig={boardConfig}
                                         components={components}
                                         wires={wires}
+                                        junctions={junctions}
                                         viewSide={viewSide}
                                         showLabels={showLabels}
                                         wireColors={wireColors}
                                         selectedItem={selectedItem}
+                                        selectedTool={selectedTool}
                                         hoveredGrid={hoveredGrid}
                                         currentWireStart={currentWireStart}
                                         currentWireRouteType={currentWireRouteType}
@@ -2491,7 +2723,8 @@ ${JSON.stringify(circuitData, null, 2)}`;
                                         onMouseLeave={handleMouseLeave}
                                         handleComponentDragStart={handleComponentDragStart}
                                         handleWireEndpointDragStart={handleWireEndpointDragStart}
-                                        handleWireClick={(e, id) => { e.stopPropagation(); setSelectedItem({ type: 'wire', id }); }}
+                                        handleWireClick={(e, id) => { if (selectedTool !== 'select') return; e.stopPropagation(); setSelectedItem({ type: 'wire', id }); }}
+                                        handleJunctionMouseDown={(e, id) => { if (selectedTool !== 'select' || e.button === 2) return; e.stopPropagation(); setSelectedItem({ type: 'junction', id }); }}
                                         handleDeviceDown={handleDeviceDown}
                                         isPrintMode={false}
                                         connectionGraph={connectionGraph}
@@ -2628,6 +2861,7 @@ ${JSON.stringify(circuitData, null, 2)}`;
                     <PrintLayout
                         components={components}
                         wires={wires}
+                        junctions={junctions}
                         boardConfig={boardConfig}
                         showLabels={showLabels}
                         wireColors={wireColors}
